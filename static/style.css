@@ -232,6 +232,7 @@ textarea::placeholder {
 .action-delete .delete-hint {
   position: absolute;
   left: 18px;
+  top: 0;
 }
 
 .id {
@@ -277,6 +278,7 @@ textarea::placeholder {
 .row.multiline > textarea {
   margin-left: 10px;
   width: calc(100% - 10px);
+  border-radius: 2px;
 }
 
 .tag {
@@ -332,11 +334,18 @@ textarea::placeholder {
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-direction: column;
 }
 
 .drop-indicator .material-icons {
   font-size: 36px;
   color: rgba(0,0,0,.38);
+}
+
+.upload-hint {
+  transition: opacity .2s ease;
+  position: absolute;
+  transform: translateY(24px);
 }
 
 .fade-enter-active {

@@ -71,8 +71,9 @@
             <div class="scroll-anchor" ref="anchor"></div>
           </div>
           <transition name="fast-fade">
-            <div class="drop-indicator" v-if="dragging">
-              <i class="material-icons">file_upload</i>
+            <div class="drop-indicator" v-if="dragging || uploading">
+              <i class="material-icons" key="dragging">file_upload</i>
+              <div class="hint upload-hint" :style="{ opacity: uploading ? 1 : 0 }">{{ uploading }} remaining...</div>
             </div>
           </transition>
           <div class="bottom-bar">

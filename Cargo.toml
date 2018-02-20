@@ -15,6 +15,7 @@ serde_json = "*"
 ctrlc = "*"
 leveldb = "*"
 ws = "*"
+uuid = { version = "*", features = ["v4"] }
 
 [features]
 default = ['clippy']

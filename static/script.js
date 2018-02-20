@@ -18,13 +18,36 @@ function buildWsURI(key) {
   }
 }
 
-function sendWait(data) {
+function sendWait(data, raw = false) {
   return new Promise((resolve, reject) => {
     conn.onmessage = msg => {
       resolve(JSON.parse(msg.data))
     };
-    conn.send(JSON.stringify(data));
+    const compiled = raw ? data : JSON.stringify(data);
+    conn.send(compiled);
   });
+}
+
+function readAsTA(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      return resolve(reader.result);
+    };
+    reader.onerror = reject;
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+async function uploadFile(dt) {
+  const segs = dt.name.split('.');
+  const ext = segs[segs.length-1];
+
+  const createResult = await sendWait({ cmd: 'upload', ext });
+  if(!createResult.ok) return false;
+
+  const content = await readAsTA(dt);
+  const uploadResult = await sendWait(content, true);
 }
 
 function deepClone(a) {
@@ -72,6 +95,7 @@ const desc = {
     activeTag: null,
     tagFilter: '',
     dragging: 0,
+    uploading: false,
     pendingDeletion: null,
   },
   methods: {
@@ -135,7 +159,6 @@ const desc = {
       }
       while(curPtr < this.referenceEntries.length) {
         // Delete tailing
-        console.log(this.referenceEntries[curPtr]);
         await sendWait({ cmd: 'del', target: this.referenceEntries[curPtr].id });
         ++curPtr;
       }
@@ -247,10 +270,20 @@ const desc = {
         ev.preventDefault();
     },
 
-    drop(ev) {
+    async drop(ev) {
       if([...ev.dataTransfer.types].includes('Files'))
         ev.preventDefault();
       this.dragging = 0;
+      this.uploading = 0;
+      for(const f of ev.dataTransfer.files)
+        if(f.type.indexOf('image/') === 0)
+          ++this.uploading;
+          
+      for(const f of ev.dataTransfer.files)
+        if(f.type.indexOf('image/') === 0) {
+          await uploadFile(f);
+          --this.uploading;
+        }
     },
 
     dragEnter(ev) {

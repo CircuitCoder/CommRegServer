@@ -3,3 +3,5 @@
 **/*.rs.bk
 
 db/
+static/store/*
+!static/store/.gitkeep

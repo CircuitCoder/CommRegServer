@@ -22,6 +22,8 @@ extern crate ctrlc;
 
 extern crate leveldb;
 
+extern crate uuid;
+
 mod store;
 mod query;
 mod admin;

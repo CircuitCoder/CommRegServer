@@ -1,19 +1,24 @@
 use ws;
-use ws::{Sender, Handshake, Message};
+use ws::{Sender, Handshake, Message, Frame};
 use store::{Store, Entry};
 use std::sync::*;
 use serde_json;
 use serde_json::Value;
 use std::str::Split;
+use uuid::Uuid;
+use std::fs::*;
+use std::path::Path;
+use std::io::Write;
 
 pub struct Handler {
     sender: Sender,
     store: &'static RwLock<Store>,
+    uploading: Option<File>,
 }
 
 impl Handler {
     pub fn new(sender: Sender, store: &'static RwLock<Store>) -> Handler {
-        Handler { sender, store }
+        Handler { sender, store, uploading: None }
     }
 
     fn list(&self) -> ws::Result<()> {
@@ -73,8 +78,49 @@ impl ws::Handler for Handler {
         } else if data["cmd"] == "del" {
             // TODO: Can we remove this clone?
             self.del(data["target"].clone())
+        } else if data["cmd"] == "upload" {
+            // Generate uuid
+            let uuid = Uuid::new_v4();
+            let basename = uuid.hyphenated();
+            let ext = match data["ext"] {
+                Value::String(ref s) => s,
+                _ => {
+                    self.sender.send("{\"ok\":0}")?;
+                    return Ok(());
+                },
+            };
+            let path = Path::new("static/store/").join(format!("{}.{}", basename, ext));
+            let opening = OpenOptions::new().write(true).create(true).open(path);
+            self.uploading = match opening {
+                Ok(f) => Some(f),
+                Err(e) => return Err(ws::Error::new(ws::ErrorKind::Custom(Box::new(e)), "Cannot create file")),
+            };
+            self.sender.send("{\"ok\":1}")?;
+            Ok(())
         } else {
             Ok(())
+        }
+    }
+
+    fn on_frame(&mut self, frame: Frame) -> ws::Result<Option<Frame>> {
+        if frame.is_control() {
+            return Ok(Some(frame));
+        };
+
+        let file = match self.uploading {
+            None => return Ok(Some(frame)),
+            Some(ref mut f) => f,
+        };
+
+        match file.write_all(&frame.payload()) {
+            Err(e) => Err(ws::Error::new(ws::ErrorKind::Custom(Box::new(e)), "Writing failed")),
+            Ok(_) => {
+                if frame.is_final() {
+                    self.uploading = None; // Drop the file to close it
+                    self.sender.send("{\"ok\":1}")?;
+                }
+                Ok(None)
+            },
         }
     }
 }
