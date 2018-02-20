@@ -1,0 +1,90 @@
+<!-- Administration Panel -->
+<!DOCTYPE html>
+
+<html>
+<head>
+  <meta chatset="UTF-8">
+  <title>CRS - Admin</title>
+  <link rel="stylesheet" href="/style.css">
+  <link href="https://fonts.proxy.ustclug.org/icon?family=Material+Icons|Roboto:100,400,700,900"
+      rel="stylesheet">
+  <script src="https://cdn.bootcss.com/vue/2.5.13/vue.min.js"></script>
+  <script src="/script.js"></script>
+</head>
+<body onload="setup()" @focus="discardAll()">
+  <div class="container">
+    <div id="app">
+      <div class="connection-form">
+        <input v-model="authKey" @keydown.enter="connect" placeholder="Login Key" :class="{ error: wrongKey }">
+      </div>
+      <transition name="fade">
+        <div class="content" v-if="connected">
+          <div class="entries">
+            <div class="inner">
+              <div class="entry" v-for="entry of entries">
+                <div class="row title-row">
+                  <i class="material-icons">title</i>
+                  <input placeholder="Name" v-model="entry.name"></input>
+                </div>
+                <div class="row">
+                  <i class="material-icons">inbox</i>
+                  <input placeholder="Category" v-model="entry.category" @focus="inputCate(entry)" @blur="discardCate($event)"></input>
+                </div>
+                <div class="row multiline tag-row">
+                  <i class="material-icons">label</i>
+                  <span class="tag" v-for="(tag, id) of entry.tags"><i class="material-icons icon-btn" @click="delTag(entry, id, $event)">close</i>{{ tag }}</span>
+                  <input placeholder="Tags"
+                    class="tag-input"
+                    @keydown.space="addTag(entry, $event)"
+                    @keydown.enter="addTag(entry, $event)"
+                    @keydown.backspace="delLastTag(entry, $event)"
+                    @focus="inputTag(entry, $event)"
+                    @input="updateTagFilter($event)"
+                    @blur="discardTag(entry, $event)">
+                </div>
+                <div class="row multiline">
+                  <i class="material-icons">description</i>
+                  <textarea placeholder="Description" v-model="entry.desc" @input="autoresize($event.target)"></textarea>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="bottom-bar">
+            <div class="inner">
+              <i class="material-icons icon-btn" @click="add">add</i>
+              <input class="bottom-search" placeholder="search">
+              <transition name="fast-fade" mode="out-in">
+                <i class="material-icons syncing-ind syncing" v-if="updateDebouncer !== null" key="syncing">sync</i>
+                <i class="material-icons syncing-ind synced" v-if="updateDebouncer === null" key="synced">done</i>
+              </transition>
+            </div>
+          </div>
+          <div class="bottom-sheet" :class="{ active: activeCategory !== null }">
+            <div class="inner">
+              <div class="title">Select a Category</div>
+              <div class="text-btn-group">
+                <div class="text-btn" v-for="cate of CATEGORIES" @mousedown="applyCate(cate)">{{ cate }}</div>
+              </div>
+              <div class="hint">Arbitary categories can be inserted by typing directly into the field</div>
+            </div>
+          </div>
+          <div class="bottom-sheet" :class="{ active: activeTag !== null }">
+            <div class="inner">
+              <div class="title">Frequently Used Tags
+                <span class="tag-filter" v-if="tagFilter !== ''">Starting With <span class="tag-filter-content">{{ tagFilter }}</span></span>
+              </div>
+              <div class="text-btn-group">
+                <div class="text-btn" v-for="tag of frequentTags" @mousedown="applyTag(tag)">{{ tag }}</div>
+              </div>
+              <div class="text-btn-group" v-if="frequentTags.length === 0">
+                <div class="empty-hint">Nothing's here :)</div>
+              </div>
+              <div class="hint">Your frequently used tags will show up here. Typing in the field can filter this list.</div>
+            </div>
+          </div>
+        </div>
+      </transition>
+    </div>
+  </div>
+</body>
+</html>

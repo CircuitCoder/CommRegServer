@@ -1,0 +1,20 @@
+[package]
+name = "comm_reg_server"
+version = "0.1.0"
+authors = ["Liu Xiaoyi <xiaoyi-l17@mails.tsinghua.edu.cn>"]
+
+[dependencies]
+clippy = { version = "*", optional = true }
+rocket = "*"
+rocket_codegen = "*"
+rocket_contrib = "*"
+lazy_static = "*"
+serde = "*"
+serde_derive = "*"
+serde_json = "*"
+ctrlc = "*"
+leveldb = "*"
+ws = "*"
+
+[features]
+default = ['clippy']
