@@ -301,11 +301,13 @@ const desc = {
     },
 
     dragEnter(ev) {
-      ++this.dragging;
+      if([...ev.dataTransfer.types].includes('Files'))
+        ++this.dragging;
     },
 
     dragLeave(ev) {
-      --this.dragging;
+      if([...ev.dataTransfer.types].includes('Files'))
+        --this.dragging;
     },
 
     addFile(entry) {
