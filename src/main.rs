@@ -3,6 +3,7 @@
 #![cfg_attr(feature="clippy", plugin(clippy))]
 
 #![feature(integer_atomics)]
+#![feature(option_filter)]
 #![feature(nll)]
 #![feature(conservative_impl_trait)]
 

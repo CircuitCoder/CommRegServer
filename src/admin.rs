@@ -1,14 +1,22 @@
-use ws;
-use ws::{Sender, Handshake, Message, Frame};
-use store::{Store, Entry};
-use std::sync::*;
-use serde_json;
+use serde::Serializer;
 use serde_json::Value;
-use std::str::Split;
-use uuid::Uuid;
+use serde_json;
+use std::borrow::Cow;
 use std::fs::*;
-use std::path::Path;
 use std::io::Write;
+use std::path::Path;
+use std::str::Split;
+use std::sync::*;
+use std;
+use store::{Store, Entry};
+use uuid::Uuid;
+use ws::{Sender, Handshake, Message, Frame};
+use ws;
+
+fn err_to_wserr<'a, T, I: Into<Cow<'static, str>>>(e: T, reason: I) -> ws::Error
+  where T: 'static + std::error::Error + Send + Sync {
+    ws::Error::new(ws::ErrorKind::Custom(Box::new(e)), reason)
+}
 
 pub struct Handler {
     sender: Sender,
@@ -23,7 +31,7 @@ impl Handler {
 
     fn list(&self) -> ws::Result<()> {
         let s = match serde_json::to_string(&self.store.read().unwrap().filter::<Split<&str>>(None, None)) {
-            Err(e) => return Err(ws::Error::new(ws::ErrorKind::Custom(Box::new(e)), "Serialization failed")),
+            Err(e) => return Err(err_to_wserr(e, "Serialization failed")),
             Ok(d) => d,
         };
         self.sender.send(s)?;
@@ -32,7 +40,7 @@ impl Handler {
 
     fn put(&self, payload: Value) -> ws::Result<()> {
         let payload: Entry = match serde_json::from_value(payload) {
-            Err(e) => return Err(ws::Error::new(ws::ErrorKind::Custom(Box::new(e)), "Deserialization failed")),
+            Err(e) => return Err(err_to_wserr(e, "Deserialization failed")),
             Ok(d) => d,
         };
         self.store.write().unwrap().put(payload);
@@ -52,6 +60,42 @@ impl Handler {
         self.sender.send("{\"ok\":0}")?;
         Ok(())
     }
+
+    fn files(&self) -> ws::Result<()> {
+        let iter = match read_dir(Path::new("./static/store")) {
+            Err(e) => return Err(err_to_wserr(e, "Not privleged to read director")),
+            Ok(i) => i,
+        };
+
+        let filtered = iter.filter_map(|e| {
+            let e = match e {
+                Err(_) => return None,
+                Ok(e) => e,
+            };
+
+            let ft = e.file_type();
+            if ft.is_err() || !ft.unwrap().is_file() {
+                return None;
+            }
+
+            e.path()
+                .file_name()
+                .filter(|s| *s != ".gitkeep")
+                .and_then(|s| s.to_str())
+                .map(|s| s.to_string())
+        });
+
+        let mut writer = Vec::with_capacity(128);
+        let mut ser = serde_json::ser::Serializer::new(&mut writer);
+        let result = ser.collect_seq(filtered);
+        if let Err(e) = result {
+            Err(err_to_wserr(e, "Serialization failed"))
+        } else {
+            // TODO: maybe there is arbitary files in the directory
+            self.sender.send(String::from_utf8(writer).unwrap());
+            Ok(())
+        }
+    }
 }
 
 impl ws::Handler for Handler {
@@ -67,7 +111,7 @@ impl ws::Handler for Handler {
 
     fn on_message(&mut self, msg: Message) -> ws::Result<()> {
         let data: Value = match serde_json::from_slice(&msg.into_data()) {
-            Err(e) => return Err(ws::Error::new(ws::ErrorKind::Custom(Box::new(e)), "Deserialization failed")),
+            Err(e) => return Err(err_to_wserr(e, "Deserialization failed")),
             Ok(d) => d,
         };
         if data["cmd"] == "list" {
@@ -93,10 +137,12 @@ impl ws::Handler for Handler {
             let opening = OpenOptions::new().write(true).create(true).open(path);
             self.uploading = match opening {
                 Ok(f) => Some(f),
-                Err(e) => return Err(ws::Error::new(ws::ErrorKind::Custom(Box::new(e)), "Cannot create file")),
+                Err(e) => return Err(err_to_wserr(e, "Cannot create file")),
             };
             self.sender.send("{\"ok\":1}")?;
             Ok(())
+        } else if data["cmd"] == "files" {
+            self.files()
         } else {
             Ok(())
         }

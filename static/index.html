@@ -11,7 +11,7 @@
   <script src="https://cdn.bootcss.com/vue/2.5.13/vue.min.js"></script>
   <script src="/script.js"></script>
 </head>
-<body onload="setup()" @focus="discardAll()">
+<body onload="setup()">
   <div class="container">
     <div id="app">
       <div class="connection-form">
@@ -23,7 +23,7 @@
           @dragleave="dragLeave($event)"
           @dragover="dragOver($event)"
           @drop="drop($event)"
-          @click="discardDeletion()"
+          @click="discardAll()"
           ref="content">
           <div class="entries">
             <div class="inner">
@@ -51,6 +51,19 @@
                 <div class="row multiline">
                   <i class="material-icons">description</i>
                   <textarea placeholder="Description" v-model="entry.desc" @input="autoresize($event.target)"></textarea>
+                </div>
+                <div class="row multiline">
+                  <i class="material-icons">attachment</i>
+                  <div class="img-track">
+                    <div class="img-track-inner">
+                      <div class="img-slot" v-for="file of entry.files">
+                        <img :src="storeUri(file)"></img>
+                      </div>
+                      <div class="img-slot placeholder img-btn" @click="addFile(entry)">
+                        <i class="material-icons">add</i>
+                      </div>
+                    </div>
+                  </div>
                 </div>
                 <div class="action-row">
                   <div class="action action-delete" @click="doDelete(entry.id)" :class="{ 'delete-confirm': pendingDeletion === entry.id }">
@@ -107,6 +120,21 @@
                 <div class="empty-hint">Nothing's here :)</div>
               </div>
               <div class="hint">Your frequently used tags will show up here. Typing in the field can filter this list.</div>
+            </div>
+          </div>
+          <div class="bottom-sheet" :class="{ active: activeFile !== null }">
+            <div class="inner">
+              <div class="title">File Library</div>
+              <div class="hint">You can upload files by dropping them into this page, or use the upload button below.</div>
+              <div class="img-field">
+                <div class="img-slot placeholder img-btn" @click="manualUpload()">
+                  <i class="material-icons">file_upload</i>
+                </div>
+                <div v-for="file of files" @click="insertFile(file)" class="img-slot img-btn">
+                  <img :src="storeUri(file)"></img>
+                </div>
+                <input type="file" ref="fileSelector" class="file-selector" @change="doUpload()" accept="image/*">
+              </div>
             </div>
           </div>
         </div>

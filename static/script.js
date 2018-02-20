@@ -89,10 +89,12 @@ const desc = {
     authKey: '',
     entries: [],
     referenceEntries: [],
+    files: null,
 
     updateDebouncer: null,
     activeCategory: null,
     activeTag: null,
+    activeFile: null,
     tagFilter: '',
     dragging: 0,
     uploading: false,
@@ -167,6 +169,10 @@ const desc = {
       // TODO: Syncdown will abort editing process
     },
 
+    async listFiles() {
+      this.files = await sendWait({ cmd: 'files' });
+    },
+
     findMaxId() {
       return this.entries.reduce((acc, e) => e.id > acc ? e.id : acc, 0);
     },
@@ -179,6 +185,8 @@ const desc = {
         category: '',
         tags: [],
         desc: '',
+        files: [],
+        icon: null,
         creation: 'FIXME',
         disbanded: null,
       });
@@ -274,16 +282,22 @@ const desc = {
       if([...ev.dataTransfer.types].includes('Files'))
         ev.preventDefault();
       this.dragging = 0;
+      await this.upload(ev.dataTransfer.files);
+    },
+
+    async upload(list) {
       this.uploading = 0;
-      for(const f of ev.dataTransfer.files)
+      for(const f of list)
         if(f.type.indexOf('image/') === 0)
           ++this.uploading;
-          
-      for(const f of ev.dataTransfer.files)
+
+      for(const f of list)
         if(f.type.indexOf('image/') === 0) {
           await uploadFile(f);
           --this.uploading;
         }
+      // Upload finished, refresh list
+      await this.listFiles();
     },
 
     dragEnter(ev) {
@@ -292,6 +306,43 @@ const desc = {
 
     dragLeave(ev) {
       --this.dragging;
+    },
+
+    addFile(entry) {
+      if(this.files === null) this.listFiles();
+      setTimeout(() => {
+        this.activeFile = entry;
+      });
+    },
+
+    discardFile() {
+      this.activeFile = null;
+    },
+
+    insertFile(file) {
+      if(this.activeFile === null) return;
+      this.activeFile.files.push(file);
+    },
+
+    manualUpload() {
+      this.$refs.fileSelector.click();
+      this.waitForInput
+    },
+
+    doUpload() {
+      if(this.$refs.fileSelector.value === '') // Already empty
+        return;
+      this.upload(this.$refs.fileSelector.files);
+      this.$refs.fileSelector.value = '';
+    },
+
+    storeUri(uri) {
+      return '/store/' + uri;
+    },
+
+    discardAll() {
+      this.discardDeletion();
+      this.discardFile();
     },
   },
 

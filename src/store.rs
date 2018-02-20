@@ -19,6 +19,8 @@ pub struct Entry {
     category: String, // Category
     tags: Vec<String>, // Tags
     desc: String, // Description
+    files: Vec<String>, // Files
+    icon: Option<String>, // File used as icon
     creation: String, // ISO Timestamp
     disbandment: Option<String>, // ISO Timestamp, None if this entry is active
 }
@@ -220,6 +222,7 @@ impl Store {
 
     pub fn close(&mut self) {
         println!("Syncing storage...");
+        // TODO: try to drop self.db
     }
 
     pub fn put(&mut self, entry: Entry) -> Result<(), StoreError> {

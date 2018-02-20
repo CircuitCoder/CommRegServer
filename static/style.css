@@ -348,6 +348,64 @@ textarea::placeholder {
   transform: translateY(24px);
 }
 
+.img-slot {
+  height: 80px;
+  width: 100px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 2px;
+  background: rgba(255,255,255,.5);
+  vertical-align: bottom;
+}
+
+.img-slot > img {
+  max-width: 100px;
+  max-height: 80px;
+}
+
+.img-slot.placeholder > .material-icons {
+  color: rgba(0,0,0,.38);
+  font-size: 36px;
+  transition: color .2s ease;
+}
+
+.img-track {
+  background: rgba(0,0,0,.06);
+  height: 80px;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.row.multiline > .img-track {
+  width: calc(100% - 10px);
+  margin-left: 10px;
+}
+
+.img-field {
+  background: rgba(0,0,0,.06);
+  border-radius: 2px;
+}
+
+.img-track, .img-field {
+  font-size: 0; /* Prevents whitespaces */
+}
+
+.img-btn {
+  transition: opacity .2s ease;
+  opacity: 1;
+  cursor: pointer;
+}
+
+.img-btn:hover {
+  opacity: .7;
+}
+
+.file-selector {
+  position: fixed;
+  top: -1000px; /* Out of view */
+}
+
 .fade-enter-active {
   transition: opacity .5s ease-out;
 }
