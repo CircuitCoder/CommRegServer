@@ -18,10 +18,16 @@
         <input v-model="authKey" @keydown.enter="connect" placeholder="Login Key" :class="{ error: wrongKey }">
       </div>
       <transition name="fade">
-        <div class="content" v-if="connected">
+        <div class="content" v-if="connected"
+          @dragenter="dragEnter($event)"
+          @dragleave="dragLeave($event)"
+          @dragover="dragOver($event)"
+          @drop="drop($event)"
+          @click="discardDeletion()"
+          ref="content">
           <div class="entries">
             <div class="inner">
-              <div class="entry" v-for="entry of entries">
+              <div class="entry" v-for="entry of entries" :key="entry.id">
                 <div class="row title-row">
                   <i class="material-icons">title</i>
                   <input placeholder="Name" v-model="entry.name"></input>
@@ -46,9 +52,29 @@
                   <i class="material-icons">description</i>
                   <textarea placeholder="Description" v-model="entry.desc" @input="autoresize($event.target)"></textarea>
                 </div>
+                <div class="action-row">
+                  <div class="action action-delete" @click="doDelete(entry.id)" :class="{ 'delete-confirm': pendingDeletion === entry.id }">
+                    <i class="material-icons">delete_forever</i>
+                    <transition name="slide">
+                      <span key="normal" class="delete-hint" v-if="pendingDeletion !== entry.id">
+                        Delete
+                      </span>
+                      <span key="confirm" class="delete-hint" v-if="pendingDeletion === entry.id">
+                        Confirm?
+                      </span>
+                    </transition>
+                  </div>
+                  <div class="id">#{{ entry.id }}</div>
+                </div>
               </div>
             </div>
+            <div class="scroll-anchor" ref="anchor"></div>
           </div>
+          <transition name="fast-fade">
+            <div class="drop-indicator" v-if="dragging">
+              <i class="material-icons">file_upload</i>
+            </div>
+          </transition>
           <div class="bottom-bar">
             <div class="inner">
               <i class="material-icons icon-btn" @click="add">add</i>

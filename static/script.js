@@ -71,6 +71,8 @@ const desc = {
     activeCategory: null,
     activeTag: null,
     tagFilter: '',
+    dragging: 0,
+    pendingDeletion: null,
   },
   methods: {
     connect() {
@@ -113,16 +115,29 @@ const desc = {
       // Assuming the array has ascending ID
       const snapshot = deepClone(this.entries);
       let curPtr = 0;
-      //TODO: deleting
       for(let e of snapshot) {
-        if(curPtr >= this.referenceEntries.length || this.referenceEntries[curPtr].id  > e.id) {
+        while(curPtr < this.referenceEntries.length && this.referenceEntries[curPtr].id < e.id) {
+          // Delete
+          await sendWait({ cmd: 'del', target: this.referenceEntries[curPtr].id });
+          ++curPtr;
+        }
+
+        if(curPtr >= this.referenceEntries.length || this.referenceEntries[curPtr].id > e.id) {
+          // New
           const data = await sendWait({ cmd: 'put', payload: e });
-        } else if(this.referenceEntries[curPtr].id === e.id) {
+        } else {
           if(!deepEq(e, this.referenceEntries[curPtr])) {
+            // Update
             await sendWait({ cmd: 'put', payload: e });
           }
           ++curPtr;
         }
+      }
+      while(curPtr < this.referenceEntries.length) {
+        // Delete tailing
+        console.log(this.referenceEntries[curPtr]);
+        await sendWait({ cmd: 'del', target: this.referenceEntries[curPtr].id });
+        ++curPtr;
       }
 
       this.referenceEntries = snapshot;
@@ -143,6 +158,11 @@ const desc = {
         desc: '',
         creation: 'FIXME',
         disbanded: null,
+      });
+
+      setTimeout(() => {
+        // Next frame
+        this.$refs.anchor.scrollIntoView({ behavior: 'smooth' });
       });
     },
 
@@ -192,6 +212,24 @@ const desc = {
       this.activeTag = null;
     },
 
+    discardDeletion() {
+      this.pendingDeletion = null;
+    },
+
+    doDelete(id) {
+      if(this.pendingDeletion === id) {
+        // Do deletion
+        this.pendingDeletion = null;
+        const index = this.entries.findIndex(e => e.id === id);
+        this.entries.splice(index, 1);
+      } else {
+        setTimeout(() => {
+          // Next frame
+          this.pendingDeletion = id;
+        });
+      }
+    },
+
     updateTagFilter(ev) {
       this.tagFilter = ev.target.value;
     },
@@ -200,8 +238,27 @@ const desc = {
       // Minimal height: 2 lines + border = 60px
       target.style.height = '60px';
       // Then set height to scrollHeight
-      console.log(target.scrollHeight);
       target.style.height = target.scrollHeight + 'px';
+    },
+
+    // Drag 'n Drop
+    dragOver(ev) {
+      if([...ev.dataTransfer.types].includes('Files'))
+        ev.preventDefault();
+    },
+
+    drop(ev) {
+      if([...ev.dataTransfer.types].includes('Files'))
+        ev.preventDefault();
+      this.dragging = 0;
+    },
+
+    dragEnter(ev) {
+      ++this.dragging;
+    },
+
+    dragLeave(ev) {
+      --this.dragging;
     },
   },
 

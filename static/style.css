@@ -46,6 +46,7 @@ input, textarea, select, button {
   height: 60px;
   box-shadow: rgba(0,0,0,.12) 0 -2px 6px;
   z-index: 100;
+  background: white;
 }
 
 .bottom-bar .inner {
@@ -180,10 +181,65 @@ textarea::placeholder {
 }
 
 .entry {
-  padding: 10px 20px;
+  padding: 10px 20px; /* Bottom for id field */
   border-radius: 2px;
   box-shadow: rgba(0,0,0,.12) 0 2px 6px;
   margin: 20px 0;
+  position: relative;
+}
+
+.action-row {
+  line-height: 16px;
+  padding-left: 34px;
+}
+
+.action {
+  font-size: 12px;
+  line-height: 16px;
+  display: inline-flex;
+
+  align-items: center;
+
+  transition: opacity .2s ease;
+
+  color: black;
+  opacity: .7;
+
+  cursor: pointer;
+}
+
+.action:hover {
+  opacity: 1;
+}
+
+.action .material-icons {
+  font-size: 16px;
+}
+
+.action-delete {
+  position: relative;
+  transition: opacity .2s ease, color .2s ease;
+}
+
+.action-delete.delete-confirm {
+  color: red;
+}
+
+.action-delete.delete-confirm .material-icons {
+  color: red;
+}
+
+.action-delete .delete-hint {
+  position: absolute;
+  left: 18px;
+}
+
+.id {
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 100;
+  color: rgba(0,0,0,.38);
+  float: right;
 }
 
 .row {
@@ -234,6 +290,7 @@ textarea::placeholder {
   margin-left: 10px;
 
   margin-bottom: 5px;
+  color: rgba(0,0,0,.7);
 }
 
 .tag > .material-icons {
@@ -261,6 +318,27 @@ textarea::placeholder {
   font-weight: 400;
 }
 
+.drop-indicator {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(0,0,0,.12);
+  backdrop-filter: blur(2px);
+  color: rgba(0,0,0,.38);
+  z-index: 200;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.drop-indicator .material-icons {
+  font-size: 36px;
+  color: rgba(0,0,0,.38);
+}
+
 .fade-enter-active {
   transition: opacity .5s ease-out;
 }
@@ -283,4 +361,22 @@ textarea::placeholder {
 
 .fast-fade-enter, .fast-fade-leave-to {
   opacity: 0;
+}
+
+.slide-enter-active {
+  transition: transform .2s ease-out, opacity .2s ease-out;
+}
+
+.slide-leave-active {
+  transition: transform .2s ease-in, opacity .2s ease-out;
+}
+
+.slide-enter {
+  opacity: 0;
+  transform: translateY(-50%);
+}
+
+.slide-leave-to {
+  opacity: 0;
+  transform: translateY(50%);
 }

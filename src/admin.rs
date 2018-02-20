@@ -34,6 +34,19 @@ impl Handler {
         self.sender.send("{\"ok\":1}")?;
         Ok(())
     }
+
+    fn del(&self, target: Value) -> ws::Result<()> {
+        if let Value::Number(n) = target {
+            if let Some(id) = n.as_i64() {
+                if let Ok(_) = self.store.write().unwrap().del(id as i32) {
+                    self.sender.send("{\"ok\":1}")?;
+                    return Ok(())
+                }
+            }
+        }
+        self.sender.send("{\"ok\":0}")?;
+        Ok(())
+    }
 }
 
 impl ws::Handler for Handler {
@@ -57,6 +70,9 @@ impl ws::Handler for Handler {
         } else if data["cmd"] == "put" {
             // TODO: Can we remove this clone?
             self.put(data["payload"].clone())
+        } else if data["cmd"] == "del" {
+            // TODO: Can we remove this clone?
+            self.del(data["target"].clone())
         } else {
             Ok(())
         }

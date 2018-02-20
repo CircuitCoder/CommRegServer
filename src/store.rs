@@ -14,7 +14,7 @@ pub enum Availability {
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Entry {
-    id: usize, // Integer ID
+    id: i32, // Integer ID
     name: String, // Name
     category: String, // Category
     tags: Vec<String>, // Tags
@@ -35,7 +35,7 @@ pub enum IndexType {
 }
 
 impl IndexType {
-    pub fn score(&self) -> i64 {
+    pub fn score(&self) -> u64 {
         match self {
             ref Name => 10,
             ref Category => 5,
@@ -46,18 +46,18 @@ impl IndexType {
 
 #[derive(Hash, PartialEq, Eq)]
 pub struct Index {
-    id: usize,
+    id: i32,
     t: IndexType,
 }
 
 impl Index {
-    pub fn new(id: usize, t: IndexType) -> Index {
+    pub fn new(id: i32, t: IndexType) -> Index {
         Index{ id, t }
     }
 }
 
 struct InternalStore {
-    entries: HashMap<usize, Entry>,
+    entries: HashMap<i32, Entry>,
     index: HashMap<String, HashSet<Index>>,
 }
 
@@ -74,7 +74,22 @@ impl InternalStore {
         }
     }
 
-    fn mem_put(&mut self, mut entry: Entry) -> Result<(usize, Vec<u8>), StoreError> {
+    fn mem_del(&mut self, id: i32) -> Result<(), StoreError> {
+        let (key, entry) = match self.entries.entry(id) {
+            Vacant(_) => return Err(StoreError::NotFound),
+            Occupied(entry)  => entry.remove_entry(),
+        };
+
+        self.del_index(entry.name.clone(), &Index::new(entry.id, IndexType::Name));
+        self.del_index(entry.category.clone(), &Index::new(entry.id, IndexType::Category));
+        for tag in entry.tags.iter() {
+            self.del_index(tag.clone(), &Index::new(entry.id, IndexType::Tag));
+        }
+
+        Ok(())
+    }
+
+    fn mem_put(&mut self, mut entry: Entry) -> Result<(i32, Vec<u8>), StoreError> {
         // TODO: recover from failure
 
         let original = self.entries.get(&entry.id);
@@ -150,7 +165,7 @@ impl InternalStore {
 
     fn filter<'a, T: Iterator<Item=&'a str>>(&self, avail: Option<Availability>, keywords: Option<T>) -> Vec<Entry> {
         // TODO: Impl
-        let mut hash: HashMap<usize,i64> = HashMap::new();
+        let mut hash: HashMap<i32,u64> = HashMap::new();
         let buckets = if let Some(iter) = keywords {
             iter.filter_map(|k| self.index.get(k))
         } else {
@@ -163,7 +178,7 @@ impl InternalStore {
             };
         };
 
-        let mut ids: Vec<usize> = hash.keys().map(|i| *i).collect();
+        let mut ids: Vec<i32> = hash.keys().map(|i| *i).collect();
         ids.sort_by(|a,b| hash.get(b).unwrap().cmp(hash.get(a).unwrap()));
 
         let it = ids.iter().map(|i| self.entries.get(i).unwrap());
@@ -209,7 +224,13 @@ impl Store {
 
     pub fn put(&mut self, entry: Entry) -> Result<(), StoreError> {
         let (id, content) = self.internal.mem_put(entry)?;
-        self.db.put(WriteOptions::new(), id as i32, &content).unwrap();
+        self.db.put(WriteOptions::new(), id, &content).unwrap();
+        Ok(())
+    }
+
+    pub fn del(&mut self, id: i32) -> Result<(), StoreError> {
+        self.internal.mem_del(id)?;
+        self.db.delete(WriteOptions::new(), id).unwrap();
         Ok(())
     }
 
