@@ -15,7 +15,7 @@ You may notice that this application uses a synchronize backend, Rocket. This is
 - [x] Removing files from entry
 - [ ] Listing files ordered by dates
 - [ ] Reordering files
-- [ ] Creation/Disbandment time
+- [x] Creation/Disbandment time
 - [ ] Returning file names when requesting upload, making it possible to add files directly after uploading
 
 ## Maintainer
