@@ -1,11 +1,13 @@
-use std::collections::*;
-use std::collections::hash_map::Entry::*;
-use std::path::Path;
 use leveldb::database::Database;
+use leveldb::iterator::Iterable;
 use leveldb::kv::KV;
 use leveldb::options::*;
-use leveldb::iterator::Iterable;
 use serde_json;
+use std::collections::*;
+use std::collections::hash_map::Entry::*;
+use std::error::Error;
+use std::fmt;
+use std::path::Path;
 
 pub enum Availability {
     Available,
@@ -25,8 +27,23 @@ pub struct Entry {
     disbandment: Option<String>, // YYYY-MM-DD
 }
 
+#[derive(Debug)]
 pub enum StoreError {
     NotFound,
+}
+
+impl fmt::Display for StoreError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "StoreError")
+    }
+}
+
+impl Error for StoreError {
+    fn description(&self) -> &'static str {
+        match *self {
+            StoreError::NotFound => "Entry not found",
+        }
+    }
 }
 
 #[derive(Hash, PartialEq, Eq)]
@@ -38,10 +55,10 @@ pub enum IndexType {
 
 impl IndexType {
     pub fn score(&self) -> u64 {
-        match self {
-            ref Name => 10,
-            ref Category => 5,
-            ref Tags => 1,
+        match *self {
+            IndexType::Name => 10,
+            IndexType::Category => 5,
+            IndexType::Tag => 1,
         }
     }
 }
@@ -65,7 +82,7 @@ struct InternalStore {
 
 impl InternalStore {
     fn add_index(&mut self, key: String, target: Index) -> bool {
-        let entry = self.index.entry(key).or_insert(HashSet::new());
+        let entry = self.index.entry(key).or_insert_with(HashSet::new);
         entry.insert(target)
     }
 
@@ -77,14 +94,14 @@ impl InternalStore {
     }
 
     fn mem_del(&mut self, id: i32) -> Result<(), StoreError> {
-        let (key, entry) = match self.entries.entry(id) {
+        let (_, entry) = match self.entries.entry(id) {
             Vacant(_) => return Err(StoreError::NotFound),
             Occupied(entry)  => entry.remove_entry(),
         };
 
         self.del_index(entry.name.clone(), &Index::new(entry.id, IndexType::Name));
         self.del_index(entry.category.clone(), &Index::new(entry.id, IndexType::Category));
-        for tag in entry.tags.iter() {
+        for tag in &entry.tags {
             self.del_index(tag.clone(), &Index::new(entry.id, IndexType::Tag));
         }
 
@@ -100,7 +117,7 @@ impl InternalStore {
             let id = entry.id;
             self.add_index(entry.name.clone(), Index::new(entry.id, IndexType::Name));
             self.add_index(entry.category.clone(), Index::new(entry.id, IndexType::Category));
-            for tag in entry.tags.iter() {
+            for tag in &entry.tags {
                 self.add_index(tag.clone(), Index::new(entry.id, IndexType::Tag));
             }
             self.entries.insert(id, entry);
@@ -124,9 +141,9 @@ impl InternalStore {
 
         let mut ctag = ctags.next();
         let mut otag = otags.next();
-        while true {
-            let ctagContent;
-            let otagContent;
+        loop {
+            let ctag_content;
+            let otag_content;
             if ctag.is_none() {
                 while let Some(tag) = otag {
                     self.del_index(tag.clone(), &Index::new(entry.id, IndexType::Tag));
@@ -134,7 +151,7 @@ impl InternalStore {
                 }
                 break;
             } else {
-                ctagContent = ctag.unwrap().clone();
+                ctag_content = ctag.unwrap().clone();
             }
 
             if otag.is_none() {
@@ -144,17 +161,17 @@ impl InternalStore {
                 }
                 break;
             } else {
-                otagContent = otag.unwrap().clone();
+                otag_content = otag.unwrap().clone();
             }
 
-            if ctagContent == otagContent {
+            if ctag_content == otag_content {
                 ctag = ctags.next();
                 otag = otags.next();
-            } else if otagContent < ctagContent {
-                self.del_index(otagContent, &Index::new(entry.id, IndexType::Tag));
+            } else if otag_content < ctag_content {
+                self.del_index(otag_content, &Index::new(entry.id, IndexType::Tag));
                 otag = otags.next();
             } else {
-                self.add_index(ctagContent, Index::new(entry.id, IndexType::Tag));
+                self.add_index(ctag_content, Index::new(entry.id, IndexType::Tag));
                 ctag = ctags.next();
             }
         }
@@ -180,14 +197,14 @@ impl InternalStore {
             };
         };
 
-        let mut ids: Vec<i32> = hash.keys().map(|i| *i).collect();
-        ids.sort_by(|a,b| hash.get(b).unwrap().cmp(hash.get(a).unwrap()));
+        let mut ids: Vec<i32> = hash.keys().cloned().collect();
+        ids.sort_by(|a,b| hash[b].cmp(&hash[a]));
 
-        let it = ids.iter().map(|i| self.entries.get(i).unwrap());
+        let it = ids.iter().map(|i| &self.entries[i]);
         if let Some(a) = avail {
             match a {
-                Available => it.filter(|e| e.disbandment.is_none()).cloned().collect(),
-                Disbanded => it.filter(|e| e.disbandment.is_some()).cloned().collect(),
+                Availability::Available => it.filter(|e| e.disbandment.is_none()).cloned().collect(),
+                Availability::Disbanded => it.filter(|e| e.disbandment.is_some()).cloned().collect(),
             }
         } else { it.cloned().collect() }
     }
@@ -213,9 +230,9 @@ impl Store {
         };
 
         let iter = store.db.iter(ReadOptions::new());
-        for (key, slice) in iter {
+        for (_, slice) in iter {
             let entry: Entry = serde_json::from_slice(&slice).unwrap();
-            store.internal.mem_put(entry);
+            store.internal.mem_put(entry).unwrap();
         }
         store
     }

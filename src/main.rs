@@ -60,7 +60,7 @@ fn boot_web() {
 
 fn boot_ws() {
     std::thread::spawn(|| {
-        ws::listen("0.0.0.0:38265", |sender| admin::Handler::new(sender, &STORE));
+        ws::listen("0.0.0.0:38265", |sender| admin::Handler::new(sender, &STORE)).unwrap();
     });
 }
 
@@ -71,10 +71,10 @@ fn main() {
     boot_web();
 
     ctrlc::set_handler(move || {
-        tx.send(0);
-    });
+        tx.send(0).unwrap();
+    }).unwrap();
 
-    rx.recv(); // Wait for Ctrl-C
+    rx.recv().unwrap(); // Wait for Ctrl-C
     STORE.write().expect("Previous writing failed.").close();
     std::process::exit(0);
 }

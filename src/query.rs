@@ -27,7 +27,7 @@ fn hello() -> &'static str {
 
 #[get("/<avail>/<search>")]
 fn available(store: State<&RwLock<Store>>, avail: Availability, search: String) -> Json<Vec<Entry>> {
-    Json(store.read().unwrap().filter(Some(avail), Some(search.split("+"))))
+    Json(store.read().unwrap().filter(Some(avail), Some(search.split('+'))))
 }
 
 pub fn routes() -> Vec<Route> {

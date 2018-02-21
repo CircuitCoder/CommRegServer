@@ -13,7 +13,7 @@ use uuid::Uuid;
 use ws::{Sender, Handshake, Message, Frame};
 use ws;
 
-fn err_to_wserr<'a, T, I: Into<Cow<'static, str>>>(e: T, reason: I) -> ws::Error
+fn err_to_wserr<T, I: Into<Cow<'static, str>>>(e: T, reason: I) -> ws::Error
   where T: 'static + std::error::Error + Send + Sync {
     ws::Error::new(ws::ErrorKind::Custom(Box::new(e)), reason)
 }
@@ -43,15 +43,19 @@ impl Handler {
             Err(e) => return Err(err_to_wserr(e, "Deserialization failed")),
             Ok(d) => d,
         };
-        self.store.write().unwrap().put(payload);
-        self.sender.send("{\"ok\":1}")?;
-        Ok(())
+
+        if let Err(e) = self.store.write().unwrap().put(payload) {
+            Err(err_to_wserr(e, "Storage failure"))
+        } else {
+            self.sender.send("{\"ok\":1}")?;
+            Ok(())
+        }
     }
 
     fn del(&self, target: Value) -> ws::Result<()> {
         if let Value::Number(n) = target {
             if let Some(id) = n.as_i64() {
-                if let Ok(_) = self.store.write().unwrap().del(id as i32) {
+                if self.store.write().unwrap().del(id as i32).is_ok() {
                     self.sender.send("{\"ok\":1}")?;
                     return Ok(())
                 }
@@ -92,7 +96,7 @@ impl Handler {
             Err(err_to_wserr(e, "Serialization failed"))
         } else {
             // TODO: maybe there is arbitary files in the directory
-            self.sender.send(String::from_utf8(writer).unwrap());
+            self.sender.send(String::from_utf8(writer).unwrap())?;
             Ok(())
         }
     }
@@ -158,7 +162,7 @@ impl ws::Handler for Handler {
             Some(ref mut f) => f,
         };
 
-        match file.write_all(&frame.payload()) {
+        match file.write_all(frame.payload()) {
             Err(e) => Err(ws::Error::new(ws::ErrorKind::Custom(Box::new(e)), "Writing failed")),
             Ok(_) => {
                 if frame.is_final() {
