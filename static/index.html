@@ -87,21 +87,17 @@
                 <div class="action-row">
                   <div class="action" @click="disband(entry)" v-if="entry.disbandment === null">
                     <i class="material-icons">flight_land</i>
-                    Disband
+                    <span>Disband</span>
                   </div>
                   <div class="action" @click="activate(entry)" v-if="entry.disbandment !== null">
                     <i class="material-icons">flight_takeoff</i>
-                    Activate
+                    <span>Activate</span>
                   </div>
                   <div class="action action-delete" @click="doDelete(entry.id)" :class="{ 'delete-confirm': pendingDeletion === entry.id }">
                     <i class="material-icons">delete_forever</i>
                     <transition name="slide">
-                      <span key="normal" class="delete-hint" v-if="pendingDeletion !== entry.id">
-                        Delete
-                      </span>
-                      <span key="confirm" class="delete-hint" v-if="pendingDeletion === entry.id">
-                        Confirm?
-                      </span>
+                      <span key="normal" class="delete-hint" v-if="pendingDeletion !== entry.id">Delete</span>
+                      <span key="confirm" class="delete-hint" v-if="pendingDeletion === entry.id">Confirm?</span>
                     </transition>
                   </div>
                   <div class="id">#{{ entry.id }}</div>

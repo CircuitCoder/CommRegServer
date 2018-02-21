@@ -188,7 +188,13 @@ impl InternalStore {
         let buckets = if let Some(iter) = keywords {
             iter.filter_map(|k| self.index.get(k))
         } else {
-            return self.entries.values().cloned().collect();
+            return match avail {
+                None => self.entries.values().cloned().collect(),
+                Some(Availability::Available) =>
+                    self.entries.values().filter(|e| e.disbandment.is_none()).cloned().collect(),
+                Some(Availability::Disbanded) =>
+                    self.entries.values().filter(|e| e.disbandment.is_some()).cloned().collect(),
+            }
         };
 
         for bucket in buckets {

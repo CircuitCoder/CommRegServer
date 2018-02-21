@@ -53,7 +53,7 @@ fn boot_web() {
         Rocket::ignite()
             .mount("/query", query::routes())
             .mount("/", routes![serve_static, serve_index])
-            .manage(&STORE)
+            .manage(&*STORE)
             .launch();
     });
 }

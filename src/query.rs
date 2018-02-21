@@ -6,6 +6,7 @@ use store::Store;
 use store::*;
 use store::Availability::*;
 use std::sync::*;
+use std::str::{Split, Utf8Error};
 
 impl<'a> FromParam<'a> for Availability {
     type Error = &'a RawStr;
@@ -20,16 +21,18 @@ impl<'a> FromParam<'a> for Availability {
     }
 }
 
-#[get("/hello")]
-fn hello() -> &'static str {
-    "Hello!"
+#[get("/<avail>/<search>")]
+fn list(store: State<&RwLock<Store>>, avail: Availability, search: &RawStr) -> Result<Json<Vec<Entry>>, Utf8Error> {
+    Ok(Json(store.read()
+        .unwrap()
+        .filter(Some(avail), Some(search.url_decode()?.split(' ')))))
 }
 
-#[get("/<avail>/<search>")]
-fn available(store: State<&RwLock<Store>>, avail: Availability, search: String) -> Json<Vec<Entry>> {
-    Json(store.read().unwrap().filter(Some(avail), Some(search.split('+'))))
+#[get("/<avail>")]
+fn listAll(store: State<&RwLock<Store>>, avail: Availability) -> Json<Vec<Entry>> {
+    Json(store.read().unwrap().filter::<Split<&str>>(Some(avail), None))
 }
 
 pub fn routes() -> Vec<Route> {
-    routes![hello, available]
+    routes![list, listAll]
 }
