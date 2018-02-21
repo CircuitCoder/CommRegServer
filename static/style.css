@@ -2,6 +2,8 @@ body {
   margin: 0;
   padding: 0;
 
+  -webkit-user-select: none;
+  -moz-user-select: none;
   user-select: none;
   font-family: 'Roboto', 'PingFang SC', 'Microsoft YaHei', sans-serif;
 }
@@ -197,6 +199,11 @@ textarea::placeholder {
   text-decoration: line-through;
   text-decoration-color: black;
   color: rgba(0,0,0,.38);
+}
+
+.entry.disbanded .title-row input::placeholder {
+  text-decoration: line-through;
+  text-decoration-color: black;
 }
 
 .action-row {
