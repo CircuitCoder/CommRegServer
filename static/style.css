@@ -10,6 +10,7 @@ input, textarea, select, button {
   font-family: 'Roboto', 'PingFang SC', 'Microsoft YaHei', sans-serif;
   font-weight: 400;
   color: rgba(0,0,0,.87);
+  background: transparent;
 }
 
 .connection-form {
@@ -89,6 +90,10 @@ input.bottom-search {
 
 .syncing-ind.syncing {
   animation: syncing-rotate .75s ease infinite;
+}
+
+.syncing-ind.synced {
+  color: #4CAF50;
 }
 
 .title {
@@ -188,6 +193,12 @@ textarea::placeholder {
   position: relative;
 }
 
+.entry.disbanded .title-row input {
+  text-decoration: line-through;
+  text-decoration-color: black;
+  color: rgba(0,0,0,.38);
+}
+
 .action-row {
   line-height: 16px;
   padding-left: 34px;
@@ -251,6 +262,7 @@ textarea::placeholder {
 
 .row.title-row > input {
   font-size: 24px;
+  transition: color .2s ease;
 }
 
 .row > input {
@@ -357,6 +369,7 @@ textarea::placeholder {
   border-radius: 2px;
   background: rgba(255,255,255,.5);
   vertical-align: bottom;
+  position: relative;
 }
 
 .img-slot > img {
@@ -368,6 +381,38 @@ textarea::placeholder {
   color: rgba(0,0,0,.38);
   font-size: 36px;
   transition: color .2s ease;
+}
+
+.img-slot-overlap {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  box-sizing: border-box;
+}
+
+.img-icon-indicator {
+  border: #2196F3 5px solid;
+}
+
+.img-slot-action {
+  background: rgba(0,0,0,.5);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity .2s ease-in;
+}
+
+.img-slot-action > .icon-btn {
+  color: white;
+}
+
+.img-slot:hover .img-slot-action {
+  opacity: 1;
+  transition: opacity .2s ease-out;
 }
 
 .img-track {

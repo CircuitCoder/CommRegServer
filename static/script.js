@@ -7,6 +7,8 @@ const CATEGORIES = [
   '科创',
   '文化',
 ];
+const DATE_FORMAT = "YYYY-MM-DD";
+const FP_FORMAT = "Y-m-d";
 
 let conn;
 
@@ -187,7 +189,7 @@ const desc = {
         desc: '',
         files: [],
         icon: null,
-        creation: 'FIXME',
+        creation: moment().format(DATE_FORMAT),
         disbanded: null,
       });
 
@@ -326,6 +328,18 @@ const desc = {
       this.activeFile.files.push(file);
     },
 
+    removeFile(entry, index) {
+      entry.files.splice(index, 1);
+    },
+
+    setIcon(entry, file) {
+      entry.icon = file;
+    },
+
+    removeIcon(entry) {
+      entry.icon = null;
+    },
+
     manualUpload() {
       this.$refs.fileSelector.click();
       this.waitForInput
@@ -336,6 +350,21 @@ const desc = {
         return;
       this.upload(this.$refs.fileSelector.files);
       this.$refs.fileSelector.value = '';
+    },
+
+    disband(entry) {
+      entry.disbandment = moment().format(DATE_FORMAT); // ISO 8601
+    },
+
+    activate(entry) {
+      entry.disbandment = null;
+    },
+
+    setupFlatpickr(event) {
+      if(event.target._flatpickr) // Already setup
+        return;
+      const fp = flatpickr(event.target, { dateFormat: FP_FORMAT });
+      fp.open();
     },
 
     storeUri(uri) {

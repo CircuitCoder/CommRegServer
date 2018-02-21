@@ -21,8 +21,8 @@ pub struct Entry {
     desc: String, // Description
     files: Vec<String>, // Files
     icon: Option<String>, // File used as icon
-    creation: String, // ISO Timestamp
-    disbandment: Option<String>, // ISO Timestamp, None if this entry is active
+    creation: String, // YYYY-MM-DD
+    disbandment: Option<String>, // YYYY-MM-DD
 }
 
 pub enum StoreError {
