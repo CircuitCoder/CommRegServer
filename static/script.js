@@ -217,7 +217,7 @@ const desc = {
     addTag(entry, ev) {
       ev.preventDefault();
       if(ev.target.value === '') return;
-      // TODO: warn about duplicate
+      if(entry.tags.includes(ev.target.value)) return;
       entry.tags.push(ev.target.value);
       ev.target.value = '';
 
@@ -231,12 +231,15 @@ const desc = {
     delLastTag(entry, ev) {
       if(ev.target.value !== '') return;
       ev.preventDefault();
-      if(entry.tags.length　> 0) entry.tags.pop();
+      if(entry.tags.length　> 0) {
+        const popped = entry.tags.pop();
+        ev.target.value = popped;
+        this.tagFilter = popped;
+      }
     },
 
     inputTag(entry, ev) {
       this.activeTag = entry;
-      this.tagFilter = ev.target.value;
     },
 
     applyTag(tag) {
@@ -328,11 +331,14 @@ const desc = {
 
     insertFile(file) {
       if(this.activeFile === null) return;
+      if(this.activeFile.files.includes(file)) return;
       this.activeFile.files.push(file);
     },
 
     removeFile(entry, index) {
-      entry.files.splice(index, 1);
+      const files = entry.files.splice(index, 1);
+      if(entry.icon === files[0])
+        entry.icon = null;
     },
 
     setIcon(entry, file) {
@@ -387,12 +393,18 @@ const desc = {
       const count = new Map();
       for(const e of this.entries)
         for(const t of e.tags)
-          if(t.indexOf(this.tagFilter) === 0) { // tagFilter === '' is correctly handled
+          if(t.indexOf(this.tagFilter) === 0) {
+            // tagFilter === '' is correctly handled
             if(count.has(t)) count.set(t, count.get(t) + 1);
             else count.set(t, 1);
           }
 
-      const tags = Array.from(count.keys());
+      let tags = Array.from(count.keys());
+
+      // Filter present tags
+      if(this.activeTag)
+        tags = tags.filter(t => !this.activeTag.tags.includes(t));
+
       tags.sort((a,b) => {
         if(count.get(a) < count.get(b)) return 1;
         else if(count.get(a) === count.get(b)) return 0;
@@ -400,6 +412,14 @@ const desc = {
       });
 
       return tags.splice(0, 20); // First ten
+    },
+
+    filteredFiles() {
+      if(this.files === null) return null;
+      // Filter present tags
+      if(this.activeFile)
+        return this.files.filter(f => !this.activeFile.files.includes(f));
+      else return this.files;
     },
 
     filteredEntries() {

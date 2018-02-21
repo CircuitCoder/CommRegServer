@@ -157,7 +157,7 @@
                 <div class="img-slot placeholder img-btn" @click="manualUpload()">
                   <i class="material-icons">file_upload</i>
                 </div>
-                <div v-for="file of files" @click="insertFile(file)" class="img-slot img-btn">
+                <div v-for="file of filteredFiles" @click="insertFile(file)" class="img-slot img-btn">
                   <img :src="storeUri(file)"></img>
                 </div>
                 <input type="file" ref="fileSelector" class="file-selector" @change="doUpload()" accept="image/*">
