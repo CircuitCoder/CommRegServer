@@ -92,6 +92,8 @@ const desc = {
     entries: [],
     referenceEntries: [],
     files: null,
+    searchStr: '',
+    // TODO: filtered changes when searchStr changes, or input loses focus
 
     updateDebouncer: null,
     activeCategory: null,
@@ -120,6 +122,7 @@ const desc = {
     async init() {
       this.connected = true;
       await this.syncDown();
+      this.filteredEntries = [...this.entries]; // Show all
     },
 
     async syncDown() {
@@ -190,7 +193,7 @@ const desc = {
         files: [],
         icon: null,
         creation: moment().format(DATE_FORMAT),
-        disbanded: null,
+        disbandment: null,
       });
 
       setTimeout(() => {
@@ -397,6 +400,26 @@ const desc = {
       });
 
       return tags.splice(0, 20); // First ten
+    },
+
+    filteredEntries() {
+      let result = this.entries;
+      console.log(result);
+      const segs = this.searchStr.split(' ');
+      for(const seg of segs) {
+        if(seg === "") continue;
+        if(seg.match(/#\d+/)) { // Is id filter
+          const filter = parseInt(seg.substr(1), 10);
+          result = result.filter(e => e.id === filter);
+        } else {
+          result = result.filter(e =>
+            e.name.indexOf(seg) !== -1
+            || e.category === seg
+            || e.tags.includes(seg)
+          );
+        }
+      }
+      return result;
     },
   },
 

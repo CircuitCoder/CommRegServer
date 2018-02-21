@@ -30,7 +30,7 @@
           ref="content">
           <div class="entries">
             <div class="inner">
-              <div class="entry" v-for="entry of entries" :key="entry.id" :class="{ disbanded: entry.disbandment !== null }">
+              <div class="entry" v-for="entry of filteredEntries" :key="entry.id" :class="{ disbanded: entry.disbandment !== null }">
                 <div class="row title-row">
                   <i class="material-icons">title</i>
                   <input placeholder="Name" v-model="entry.name"></input>
@@ -119,7 +119,7 @@
           <div class="bottom-bar">
             <div class="inner">
               <i class="material-icons icon-btn" @click="add">add</i>
-              <input class="bottom-search" placeholder="search">
+              <input class="bottom-search" placeholder="Search for category/tags/part of name or #id" v-model="searchStr">
               <transition name="fast-fade" mode="out-in">
                 <i class="material-icons syncing-ind syncing" v-if="updateDebouncer !== null" key="syncing">sync</i>
                 <i class="material-icons syncing-ind synced" v-if="updateDebouncer === null" key="synced">done</i>
