@@ -184,27 +184,30 @@ impl InternalStore {
 
     fn filter<'a, T: Iterator<Item=&'a str>>(&self, avail: Option<Availability>, keywords: Option<T>) -> Vec<Entry> {
         // TODO: Impl
-        let mut hash: HashMap<i32,u64> = HashMap::new();
+        let mut hash: HashMap<i32,i64> = HashMap::new();
         let buckets = if let Some(iter) = keywords {
             iter.filter_map(|k| self.index.get(k))
         } else {
-            return match avail {
+            let mut result: Vec<Entry> = match avail {
                 None => self.entries.values().cloned().collect(),
                 Some(Availability::Available) =>
                     self.entries.values().filter(|e| e.disbandment.is_none()).cloned().collect(),
                 Some(Availability::Disbanded) =>
                     self.entries.values().filter(|e| e.disbandment.is_some()).cloned().collect(),
-            }
+            };
+
+            result.sort_unstable_by(|a,b| { a.name.cmp(&b.name) });
+            return result;
         };
 
         for bucket in buckets {
             for &Index{ ref id, ref t } in bucket {
-                *(hash.entry(*id).or_insert(0)) += t.score();
+                *(hash.entry(*id).or_insert(0)) += t.score() as i64;
             };
         };
 
         let mut ids: Vec<i32> = hash.keys().cloned().collect();
-        ids.sort_by(|a,b| hash[b].cmp(&hash[a]));
+        ids.sort_unstable_by_key(|i| { (-hash[i], &self.entries[i].name) }); // Sort by name
 
         let it = ids.iter().map(|i| &self.entries[i]);
         if let Some(a) = avail {
