@@ -7,3 +7,6 @@ ws:
   port: 38562
 
 secret: 'YOUR_SECRET'
+
+# If your websocket is proxied to lies under the same domain, uncomment the following line and specify the prefix, without tailing slash
+# proxied: '/websocket'

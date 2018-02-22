@@ -15,15 +15,24 @@ let conn;
 
 function buildWsURI(key) {
   let host = CONFIG.ws.host;
+  let port = ':' + CONFIG.ws.port;
   if(host === '0.0.0.0') { // Virtual interface
     host = location.hostname;
   }
-  const port = CONFIG.ws.port;
+  if(CONFIG.proxied) {
+    host = location.hostname;
+    port = location.port;
+    if(port !== '') port = ':' + port;
+
+    key = CONFIG.proxied + '/' + key;
+  } else {
+    key = '/' + key;
+  };
 
   if (location.protocol === 'https:') {
-      return `wss://${host}:${port}/${key}`;
+      return `wss://${host}${port}${key}`;
   } else {
-      return `ws://${host}:${port}/${key}`;
+      return `ws://${host}${port}${key}`;
   }
 }
 

@@ -16,6 +16,7 @@ pub struct Config {
 
     #[serde(skip_serializing)] // Avoids accidental leak
     pub secret: String,
+    pub proxied: Option<String>,
 }
 
 impl Config {
