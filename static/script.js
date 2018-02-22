@@ -98,6 +98,7 @@ const desc = {
     updateDebouncer: null,
     activeCategory: null,
     activeTag: null,
+    activeTagInput: null,
     activeFile: null,
     tagFilter: '',
     dragging: 0,
@@ -219,6 +220,7 @@ const desc = {
       if(ev.target.value === '') return;
       if(entry.tags.includes(ev.target.value)) return;
       entry.tags.push(ev.target.value);
+      entry.tags.sort();
       ev.target.value = '';
 
       this.tagFilter = '';
@@ -240,10 +242,16 @@ const desc = {
 
     inputTag(entry, ev) {
       this.activeTag = entry;
+      this.activeTagInput = ev.target;
     },
 
     applyTag(tag) {
       this.activeTag.tags.push(tag);
+      this.activeTag.tags.sort();
+      if(this.activeTagInput) {
+        this.activeTagInput.value = '';
+        this.tagFilter = '';
+      }
     },
 
     discardTag(entry, ev) {
