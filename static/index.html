@@ -85,6 +85,10 @@
                   </div>
                 </div>
                 <div class="action-row">
+                  <div class="action" @click="genKey(entry)">
+                    <i class="material-icons">vpn_key</i>
+                    <span>New Key</span>
+                  </div>
                   <div class="action" @click="disband(entry)" v-if="entry.disbandment === null">
                     <i class="material-icons">flight_land</i>
                     <span>Disband</span>

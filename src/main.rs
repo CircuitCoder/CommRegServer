@@ -16,8 +16,9 @@ extern crate lazy_static;
 
 #[macro_use]
 extern crate serde_derive;
-
 extern crate serde;
+
+#[macro_use]
 extern crate serde_json;
 extern crate serde_yaml;
 extern crate ctrlc;
@@ -25,6 +26,8 @@ extern crate ctrlc;
 extern crate leveldb;
 
 extern crate uuid;
+extern crate ring;
+extern crate byteorder;
 
 mod store;
 mod query;

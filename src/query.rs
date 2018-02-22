@@ -29,7 +29,7 @@ fn list(store: State<&RwLock<Store>>, avail: Availability, search: &RawStr) -> R
 }
 
 #[get("/<avail>", rank=2)]
-fn listAll(store: State<&RwLock<Store>>, avail: Availability) -> Json<Vec<Entry>> {
+fn list_all(store: State<&RwLock<Store>>, avail: Availability) -> Json<Vec<Entry>> {
     Json(store.read().unwrap().filter::<Split<&str>>(Some(avail), None))
 }
 
@@ -39,5 +39,5 @@ fn fetch(store: State<&RwLock<Store>>, id: i32) -> Option<Json<Entry>> {
 }
 
 pub fn routes() -> Vec<Route> {
-    routes![list, listAll, fetch]
+    routes![list, list_all, fetch]
 }

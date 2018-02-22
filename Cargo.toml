@@ -17,6 +17,8 @@ ctrlc = "*"
 leveldb = "*"
 ws = "*"
 uuid = { version = "*", features = ["v4"] }
+ring = "*"
+byteorder = "*"
 
 [features]
 default = ['clippy']

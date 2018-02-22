@@ -219,7 +219,7 @@ impl InternalStore {
     }
 
     fn fetch(&self, id: i32) -> Option<Entry> {
-        self.entries.get(&id).map(|e| e.clone())
+        self.entries.get(&id).cloned()
     }
 }
 

@@ -1,3 +1,9 @@
+use byteorder::{ByteOrder, LittleEndian};
+use config::Config;
+use ring::aead;
+use ring::digest;
+use ring::error::Unspecified;
+use ring::rand::{SystemRandom, SecureRandom};
 use serde::Serializer;
 use serde_json::Value;
 use serde_json;
@@ -9,7 +15,6 @@ use std::str::Split;
 use std::sync::*;
 use std;
 use store::{Store, Entry};
-use config::Config;
 use uuid::Uuid;
 use ws::{Sender, Handshake, Message, Frame};
 use ws;
@@ -95,7 +100,7 @@ impl Handler {
         let mut collected: Vec<_> = filtered.collect();
         collected.sort_unstable_by(|a,b| b.cmp(a));
 
-        let iter = collected.iter().map(|&(t, ref f)| f);
+        let iter = collected.iter().map(|&(_, ref f)| f);
 
         let mut writer = Vec::with_capacity(128);
         let mut ser = serde_json::ser::Serializer::new(&mut writer);
@@ -107,6 +112,39 @@ impl Handler {
             self.sender.send(String::from_utf8(writer).unwrap())?;
             Ok(())
         }
+    }
+
+    // Authentication utilities for a single entry
+    fn generate_key_impl(&self, target: i32) -> Result<String, Unspecified> {
+        // Convert to bytes
+        let mut buf: [u8; 4 + aead::MAX_TAG_LEN] = [0; 4 + aead::MAX_TAG_LEN]; // 4 bytes for input, MAX_LAG_LEN for cap
+        LittleEndian::write_i32(&mut buf, target);
+
+        // Create a 256-bit hash of the master secret
+        let hash = digest::digest(&digest::SHA256, self.config.secret.as_bytes());
+
+        // Creating sealing key
+        let sealing_key = aead::SealingKey::new(&aead::AES_256_GCM, hash.as_ref())?;
+
+        // Generate a 96-bit nonce
+        let mut nonce: [u8; 12] = [0; 12];
+        let rng = SystemRandom::new();
+        rng.fill(&mut nonce)?;
+
+        let len = aead::seal_in_place(
+            &sealing_key,
+            &nonce,
+            &[],
+            &mut buf,
+            aead::MAX_TAG_LEN)?;
+        let mut result = String::with_capacity(12 * 2 + len * 2);
+        for byte in &nonce {
+            write!(&mut result as &mut std::fmt::Write, "{:02x}", byte).map_err(|_| Unspecified)?
+        }
+        for byte in &buf[..len] {
+            write!(&mut result as &mut std::fmt::Write, "{:02x}", byte).map_err(|_| Unspecified)?
+        }
+        Ok(result)
     }
 }
 
@@ -155,6 +193,33 @@ impl ws::Handler for Handler {
             Ok(())
         } else if data["cmd"] == "files" {
             self.files()
+        } else if data["cmd"] == "genKey" {
+            let number = match data["target"] {
+                Value::Number(ref n) => {
+                    if let Some(n) = n.as_i64() { n as i32 }
+                    else {
+                        self.sender.send("{\"ok\":0}")?;
+                        return Ok(());
+                    }
+                },
+                _ => {
+                    self.sender.send("{\"ok\":0}")?;
+                    return Ok(());
+                },
+            };
+            let key = match self.generate_key_impl(number) {
+                Err(_) => {
+                    self.sender.send("{\"ok\":0}")?;
+                    return Ok(());
+                },
+                Ok(s) => s
+            };
+            let s = json!({
+                "ok": 1,
+                "key": key,
+            }).to_string();
+            self.sender.send(s)?;
+            Ok(())
         } else {
             Ok(())
         }

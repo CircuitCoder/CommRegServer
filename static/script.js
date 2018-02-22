@@ -385,6 +385,12 @@ const desc = {
       this.$refs.fileSelector.value = '';
     },
 
+    async genKey(entry) {
+      // TODO: disable this when using as an individual
+      const result = await sendWait({ cmd: 'genKey', target: entry.id });
+      prompt("The world has stopped now. Copy the key and let me forget it for good.", result.key);
+    },
+
     disband(entry) {
       entry.disbandment = moment().format(DATE_FORMAT); // ISO 8601
     },

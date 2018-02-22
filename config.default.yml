@@ -6,6 +6,7 @@ ws:
   host: "0.0.0.0"
   port: 38562
 
+# Please keey this secret SECRET, as it can be used to build any valid keys
 secret: 'YOUR_SECRET'
 
 # If your websocket is proxied to lies under the same domain, uncomment the following line and specify the prefix, without tailing slash
