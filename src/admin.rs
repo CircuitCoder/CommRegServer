@@ -87,11 +87,17 @@ impl Handler {
                 .filter(|s| *s != ".gitkeep")
                 .and_then(|s| s.to_str())
                 .map(|s| s.to_string())
+                .map(|filename| (e.metadata().unwrap().modified().unwrap(), filename))
         });
+
+        let mut collected: Vec<_> = filtered.collect();
+        collected.sort_unstable_by(|a,b| b.cmp(a));
+
+        let iter = collected.iter().map(|&(t, ref f)| f);
 
         let mut writer = Vec::with_capacity(128);
         let mut ser = serde_json::ser::Serializer::new(&mut writer);
-        let result = ser.collect_seq(filtered);
+        let result = ser.collect_seq(iter);
         if let Err(e) = result {
             Err(err_to_wserr(e, "Serialization failed"))
         } else {
