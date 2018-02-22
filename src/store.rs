@@ -218,6 +218,9 @@ impl InternalStore {
         } else { it.cloned().collect() }
     }
 
+    fn fetch(&self, id: i32) -> Option<Entry> {
+        self.entries.get(&id).map(|e| e.clone())
+    }
 }
 
 pub struct Store {
@@ -265,5 +268,9 @@ impl Store {
 
     pub fn filter<'a, T: Iterator<Item=&'a str>>(&self, avail: Option<Availability>, keywords: Option<T>) -> Vec<Entry> {
         self.internal.filter(avail, keywords)
+    }
+
+    pub fn fetch(&self, id: i32) -> Option<Entry> {
+        self.internal.fetch(id)
     }
 }

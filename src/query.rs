@@ -21,18 +21,23 @@ impl<'a> FromParam<'a> for Availability {
     }
 }
 
-#[get("/<avail>/<search>")]
+#[get("/<avail>/<search>", rank=2)]
 fn list(store: State<&RwLock<Store>>, avail: Availability, search: &RawStr) -> Result<Json<Vec<Entry>>, Utf8Error> {
     Ok(Json(store.read()
         .unwrap()
         .filter(Some(avail), Some(search.url_decode()?.split(' ')))))
 }
 
-#[get("/<avail>")]
+#[get("/<avail>", rank=2)]
 fn listAll(store: State<&RwLock<Store>>, avail: Availability) -> Json<Vec<Entry>> {
     Json(store.read().unwrap().filter::<Split<&str>>(Some(avail), None))
 }
 
+#[get("/fetch/<id>")]
+fn fetch(store: State<&RwLock<Store>>, id: i32) -> Option<Json<Entry>> {
+    store.read().unwrap().fetch(id).map(Json)
+}
+
 pub fn routes() -> Vec<Route> {
-    routes![list, listAll]
+    routes![list, listAll, fetch]
 }
