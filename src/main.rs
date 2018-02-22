@@ -19,6 +19,7 @@ extern crate serde_derive;
 
 extern crate serde;
 extern crate serde_json;
+extern crate serde_yaml;
 extern crate ctrlc;
 
 extern crate leveldb;
@@ -28,14 +29,19 @@ extern crate uuid;
 mod store;
 mod query;
 mod admin;
+mod config;
 
 use rocket::Rocket;
 use rocket::response::NamedFile;
+use rocket_contrib::Json;
+use rocket::config::Environment;
 use store::Store;
 use std::sync::*;
+use config::Config;
 
 lazy_static! {
     pub static ref STORE: RwLock<Store> = RwLock::new(Store::new());
+    pub static ref CONFIG: Config = Config::load();
 }
 
 #[get("/<path..>", rank=5)]
@@ -48,11 +54,21 @@ fn serve_index() -> Option<NamedFile> {
     NamedFile::open(std::path::Path::new("static/index.html")).ok()
 }
 
+#[get("/config")]
+fn serve_config() -> Json<Config> {
+    Json(CONFIG.clone())
+}
+
 fn boot_web() {
-    std::thread::spawn(|| {
-        Rocket::ignite()
+    let config = rocket::Config::build(Environment::Staging)
+        .address(CONFIG.web.host.clone())
+        .port(CONFIG.web.port)
+        .unwrap();
+
+    std::thread::spawn(move || {
+        Rocket::custom(config, true)
             .mount("/query", query::routes())
-            .mount("/", routes![serve_static, serve_index])
+            .mount("/", routes![serve_static, serve_index, serve_config])
             .manage(&*STORE)
             .launch();
     });
@@ -60,7 +76,8 @@ fn boot_web() {
 
 fn boot_ws() {
     std::thread::spawn(|| {
-        ws::listen("0.0.0.0:38265", |sender| admin::Handler::new(sender, &STORE)).unwrap();
+        ws::listen(format!("{}:{}", CONFIG.ws.host, CONFIG.ws.port),
+            |sender| admin::Handler::new(sender, &STORE, &CONFIG)).unwrap();
     });
 }
 

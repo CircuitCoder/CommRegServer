@@ -5,3 +5,5 @@
 db/
 static/store/*
 !static/store/.gitkeep
+
+config.yml

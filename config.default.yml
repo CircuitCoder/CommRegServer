@@ -1,0 +1,9 @@
+web:
+  host: "0.0.0.0"
+  port: 8293
+
+ws:
+  host: "0.0.0.0"
+  port: 38562
+
+secret: 'YOUR_SECRET'

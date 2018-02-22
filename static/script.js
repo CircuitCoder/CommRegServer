@@ -9,14 +9,21 @@ const CATEGORIES = [
 ];
 const DATE_FORMAT = "YYYY-MM-DD";
 const FP_FORMAT = "Y-m-d";
+let CONFIG;
 
 let conn;
 
 function buildWsURI(key) {
+  let host = CONFIG.ws.host;
+  if(host === '0.0.0.0') { // Virtual interface
+    host = location.hostname;
+  }
+  const port = CONFIG.ws.port;
+
   if (location.protocol === 'https:') {
-      return `wss://${location.hostname}:38265/${key}`;
+      return `wss://${host}:${port}/${key}`;
   } else {
-      return `ws://${location.hostname}:38265/${key}`;
+      return `ws://${host}:${port}/${key}`;
   }
 }
 
@@ -472,6 +479,14 @@ const desc = {
   },
 };
 
-function setup() {
+async function setup() {
+  // Fetch query
+  const resp = await fetch('/config');
+  const config = await resp.json();
+  CONFIG = config;
+
+  document.body.style.display = 'block';
+
+  // Bootstrap app
   const app = new Vue(desc);
 }

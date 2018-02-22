@@ -9,6 +9,7 @@ use std::str::Split;
 use std::sync::*;
 use std;
 use store::{Store, Entry};
+use config::Config;
 use uuid::Uuid;
 use ws::{Sender, Handshake, Message, Frame};
 use ws;
@@ -21,12 +22,13 @@ fn err_to_wserr<T, I: Into<Cow<'static, str>>>(e: T, reason: I) -> ws::Error
 pub struct Handler {
     sender: Sender,
     store: &'static RwLock<Store>,
+    config: &'static Config,
     uploading: Option<File>,
 }
 
 impl Handler {
-    pub fn new(sender: Sender, store: &'static RwLock<Store>) -> Handler {
-        Handler { sender, store, uploading: None }
+    pub fn new(sender: Sender, store: &'static RwLock<Store>, config: &'static Config) -> Handler {
+        Handler { sender, store, config, uploading: None }
     }
 
     fn list(&self) -> ws::Result<()> {
@@ -110,7 +112,7 @@ impl Handler {
 
 impl ws::Handler for Handler {
     fn on_open(&mut self, shake: Handshake) -> ws::Result<()> {
-        if shake.request.resource() == "/secret" {
+        if shake.request.resource() == format!("/{}", self.config.secret) {
             self.sender.send("{\"ok\":1}")?;
             return Ok(())
         }
