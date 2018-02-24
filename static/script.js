@@ -137,6 +137,11 @@ const desc = {
         } catch(e) { console.error(e); }
         this.wrongKey = true;
       }
+      conn.onclose = () => {
+	setTimeout(() => {
+	  this.connect(); // Try reconnect immediately
+	}, 1000);
+      };
     },
 
     async init() {

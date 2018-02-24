@@ -4,7 +4,7 @@
 
 #![feature(integer_atomics)]
 #![feature(option_filter)]
-#![feature(nll)]
+#![feature(nll)] // Causes ICE. See rust-lang/rust #48132
 #![feature(conservative_impl_trait)]
 #![feature(catch_expr)]
 
@@ -42,10 +42,14 @@ use rocket::config::Environment;
 use store::Store;
 use std::sync::*;
 use config::Config;
+use ws::WebSocket;
+
+const PING_INTERVAL: u64 = 1; // s
 
 lazy_static! {
     pub static ref STORE: RwLock<Store> = RwLock::new(Store::new());
     pub static ref CONFIG: Config = Config::load();
+    pub static ref PING_PAYLOAD: Vec<u8> = vec![97];
 }
 
 #[get("/<path..>", rank=5)]
@@ -80,12 +84,35 @@ fn boot_web() {
 
 fn boot_ws() {
     std::thread::spawn(|| {
+        // Because of the ICE mentioned earlier, Pinging is not working right now
+        /*
+        let server = WebSocket::new(|sender|
+                                    admin::Handler::new(sender, &STORE, &CONFIG)).unwrap();
+
+        let broadcaster = server.broadcaster();
+        // Pinging
+        std::thread::spawn(move || {
+            loop {
+                std::thread::sleep(std::time::Duration::from_secs(PING_INTERVAL));
+                let _result = broadcaster.ping(PING_PAYLOAD.clone());
+                // Silently ignores
+            }
+        });
+
+        server.listen(format!("{}:{}", CONFIG.ws.host, CONFIG.ws.port)).unwrap();
+        */
         ws::listen(format!("{}:{}", CONFIG.ws.host, CONFIG.ws.port),
             |sender| admin::Handler::new(sender, &STORE, &CONFIG)).unwrap();
     });
 }
 
 fn main() {
+    let panic_handler = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        panic_handler(info);
+        std::process::exit(1);
+    }));
+
     let (tx, rx) = std::sync::mpsc::channel();
 
     boot_ws();
