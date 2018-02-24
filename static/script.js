@@ -103,6 +103,7 @@ const desc = {
   el: '#app',
   data: {
     connected: false,
+    connectionDown: false,
     wrongKey: false,
     authKey: '',
     limited: null,
@@ -131,13 +132,18 @@ const desc = {
           const data = JSON.parse(msg.data);
           if(data.ok) {
 	    if('limited' in data) this.limited = data.limited;
-            this.init();
+
+            this.connectionDown = false;
+            if(!this.connected)
+              this.init();
+            // TODO: regular refresh
             return true;
           }
         } catch(e) { console.error(e); }
         this.wrongKey = true;
       }
       conn.onclose = () => {
+        this.connectionDown = true;
 	setTimeout(() => {
 	  this.connect(); // Try reconnect immediately
 	}, 1000);
@@ -524,10 +530,12 @@ const desc = {
     entries: {
       handler() {
         if(this.updateDebouncer !== null) {
-          clearTimeout(this.updateDebouncer);
+          clearInterval(this.updateDebouncer);
         }
 
-        this.updateDebouncer = setTimeout(async () => {
+        this.updateDebouncer = setInterval(async () => {
+          if(this.connectionDown) return;
+          clearInterval(this.updateDebouncer);
           this.updateDebouncer = null;
           await this.syncUp();
           // TODO: notification

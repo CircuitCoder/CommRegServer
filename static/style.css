@@ -344,7 +344,7 @@ textarea::placeholder {
   font-weight: 400;
 }
 
-.drop-indicator {
+.backdrop-indicator {
   position: fixed;
   top: 0;
   bottom: 0;
@@ -361,12 +361,12 @@ textarea::placeholder {
   flex-direction: column;
 }
 
-.drop-indicator .material-icons {
+.backdrop-indicator .material-icons {
   font-size: 36px;
   color: rgba(0,0,0,.38);
 }
 
-.upload-hint {
+.backdrop-hint {
   transition: opacity .2s ease;
   position: absolute;
   transform: translateY(24px);
