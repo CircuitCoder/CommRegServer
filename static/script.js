@@ -372,8 +372,41 @@ const desc = {
 
     removeFile(entry, index) {
       const files = entry.files.splice(index, 1);
+
+      // Empty the icon if needed
       if(entry.icon === files[0])
         entry.icon = null;
+
+      // Update desc
+      let segs = entry.desc.split('\n');
+
+      for(let i = 0; i < segs.length; ++i) {
+        const frontEmpty = i === 0 || segs[i-1] === '';
+        const backEmpty = i === segs.length-1 || segs[i+1] === '';
+        if(frontEmpty && backEmpty) {
+          // Check for syntax
+          let result = segs[i].match(/^<(\d+)>$/);
+          if(!result) continue;
+          let id = parseInt(result[1], 10);
+          if(id === index+1) {
+            if(i === 0) {
+              segs.splice(i, 2); // Removes this one
+              --i;
+            } else {
+              segs.splice(i-1, 2); // Removes this one
+              i-=2;
+            }
+          } else if(id > index+1) segs[i] = `<${id-1}>`;
+        }
+      }
+
+      entry.desc = segs.filter(e => e !== null).join('\n');
+
+      const elIndex = this.entries.findIndex(e => e === entry);
+      const el = this.$refs.descs[elIndex];
+      setTimeout(() => {
+        this.autoresize(el);
+      });
     },
 
     setIcon(entry, file) {

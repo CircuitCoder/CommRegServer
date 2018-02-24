@@ -62,7 +62,7 @@
                 </div>
                 <div class="row multiline">
                   <i class="material-icons">description</i>
-                  <textarea placeholder="Description" v-model="entry.desc" @input="autoresize($event.target)" :disabled="locked"></textarea>
+                  <textarea placeholder="Description" v-model="entry.desc" ref="descs" @input="autoresize($event.target)" :disabled="locked"></textarea>
                 </div>
                 <div class="row multiline">
                   <i class="material-icons">attachment</i>
