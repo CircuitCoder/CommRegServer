@@ -105,6 +105,8 @@ const desc = {
     connected: false,
     wrongKey: false,
     authKey: '',
+    limited: null,
+    locked: false,
     entries: [],
     referenceEntries: [],
     files: null,
@@ -128,6 +130,7 @@ const desc = {
         try {
           const data = JSON.parse(msg.data);
           if(data.ok) {
+	    if('limited' in data) this.limited = data.limited;
             this.init();
             return true;
           }
@@ -150,6 +153,9 @@ const desc = {
         return 0;
       });
       this.referenceEntries = deepClone(this.entries);
+
+      if(this.limited !== null)
+	this.locked = this.entries.length === 0 || this.entries[0].disbandment !== null;
 
       setTimeout(() => {
         let areas = document.querySelectorAll('.row textarea');

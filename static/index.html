@@ -28,16 +28,16 @@
           @drop="drop($event)"
           @click="discardAll()"
           ref="content">
-          <div class="entries">
+          <div class="entries" :class="{ locked: locked }">
             <div class="inner">
               <div class="entry" v-for="entry of filteredEntries" :key="entry.id" :class="{ disbanded: entry.disbandment !== null }">
                 <div class="row title-row">
                   <i class="material-icons">title</i>
-                  <input placeholder="Name" v-model="entry.name"></input>
+                  <input placeholder="Name" v-model="entry.name" :disabled="locked"></input>
                 </div>
                 <div class="row">
                   <i class="material-icons">inbox</i>
-                  <input placeholder="Category" v-model="entry.category" @focus="inputCate(entry)" @blur="discardCate($event)"></input>
+                  <input placeholder="Category" v-model="entry.category" @focus="inputCate(entry)" @blur="discardCate($event)" :disabled="locked"></input>
                 </div>
                 <div class="row multiline tag-row">
                   <i class="material-icons">label</i>
@@ -49,19 +49,20 @@
                     @keydown.backspace="delLastTag(entry, $event)"
                     @focus="inputTag(entry, $event)"
                     @input="updateTagFilter($event)"
-                    @blur="discardTag(entry, $event)">
+                    @blur="discardTag(entry, $event)"
+            :disabled="locked">
                 </div>
                 <div class="row">
                   <i class="material-icons">flight_takeoff</i>
-                  <input placeholder="Creation Time" v-model="entry.creation" @focus="setupFlatpickr($event)">
+                  <input placeholder="Creation Time" v-model="entry.creation" @focus="setupFlatpickr($event)" :disabled="locked">
                 </div>
                 <div class="row" v-if="entry.disbandment !== null">
                   <i class="material-icons">flight_land</i>
-                  <input placeholder="Disbandment Time" v-model="entry.disbandment" @focus="setupFlatpickr($event)">
+                  <input placeholder="Disbandment Time" v-model="entry.disbandment" @focus="setupFlatpickr($event)" :disabled="locked">
                 </div>
                 <div class="row multiline">
                   <i class="material-icons">description</i>
-                  <textarea placeholder="Description" v-model="entry.desc" @input="autoresize($event.target)"></textarea>
+                  <textarea placeholder="Description" v-model="entry.desc" @input="autoresize($event.target)" :disabled="locked"></textarea>
                 </div>
                 <div class="row multiline">
                   <i class="material-icons">attachment</i>
@@ -78,13 +79,13 @@
                           <i class="material-icons icon-btn" v-if="entry.icon === file" @click="removeIcon(entry)">close</i>
                         </div>
                       </div>
-                      <div class="img-slot placeholder img-btn" @click="addFile(entry)">
+                      <div class="img-slot placeholder img-btn" @click="addFile(entry)" v-if="!locked">
                         <i class="material-icons">add</i>
                       </div>
                     </div>
                   </div>
                 </div>
-                <div class="action-row">
+                <div class="action-row" v-if="limited === null">
                   <div class="action" @click="genKey(entry)">
                     <i class="material-icons">vpn_key</i>
                     <span>New Key</span>
@@ -118,12 +119,14 @@
           </transition>
           <div class="bottom-bar">
             <div class="inner">
-              <i class="material-icons icon-btn" @click="add">add</i>
-              <input class="bottom-search" placeholder="Search for category/tags/part of name or #id" v-model="searchStr">
-              <transition name="fast-fade" mode="out-in">
+              <i class="material-icons icon-btn" @click="add" v-if="limited === null">add</i>
+              <span class="limited-id" v-if="limited !== null">#{{limited}}</span>
+              <input class="bottom-search" placeholder="Search for category/tags/part of name or #id" v-model="searchStr" v-if="limited === null">
+              <transition name="fast-fade" mode="out-in" v-if="!locked">
                 <i class="material-icons syncing-ind syncing" v-if="updateDebouncer !== null" key="syncing">sync</i>
                 <i class="material-icons syncing-ind synced" v-if="updateDebouncer === null" key="synced">done</i>
               </transition>
+            <i class="material-icons" v-if="locked">lock</i>
             </div>
           </div>
           <div class="bottom-sheet" :class="{ active: activeCategory !== null }">

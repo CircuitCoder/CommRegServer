@@ -29,15 +29,21 @@ pub struct Handler {
     store: &'static RwLock<Store>,
     config: &'static Config,
     uploading: Option<File>,
+    limited: Option<i32>,
 }
 
 impl Handler {
     pub fn new(sender: Sender, store: &'static RwLock<Store>, config: &'static Config) -> Handler {
-        Handler { sender, store, config, uploading: None }
+        Handler { sender, store, config, uploading: None, limited: None, }
     }
 
     fn list(&self) -> ws::Result<()> {
-        let s = match serde_json::to_string(&self.store.read().unwrap().filter::<Split<&str>>(None, None)) {
+        let result = match self.limited {
+            None => self.store.read().unwrap().filter::<Split<&str>>(None, None),
+            Some(id) => self.store.read().unwrap().fetch(id)
+                .map_or_else(Vec::new, |e| { let mut r = Vec::with_capacity(1); r.push(e); r }),
+        };
+        let s = match serde_json::to_string(&result) {
             Err(e) => return Err(err_to_wserr(e, "Serialization failed")),
             Ok(d) => d,
         };
@@ -51,7 +57,15 @@ impl Handler {
             Ok(d) => d,
         };
 
-        if let Err(e) = self.store.write().unwrap().put(payload) {
+        if self.limited.is_some() 
+            && Some(payload.id()) != self.limited {
+
+            // Permission denied
+            self.sender.send("{\"ok\":0}")?;
+            return Ok(())
+        }
+
+        if let Err(e) = self.store.write().unwrap().put(payload, self.limited.is_some()) {
             Err(err_to_wserr(e, "Storage failure"))
         } else {
             self.sender.send("{\"ok\":1}")?;
@@ -60,6 +74,11 @@ impl Handler {
     }
 
     fn del(&self, target: Value) -> ws::Result<()> {
+        if self.limited.is_some() {
+            self.sender.send("{\"ok\":0}")?; // Denied
+            return Ok(())
+        }
+
         if let Value::Number(n) = target {
             if let Some(id) = n.as_i64() {
                 if self.store.write().unwrap().del(id as i32).is_ok() {
@@ -97,7 +116,12 @@ impl Handler {
                 .map(|filename| (e.metadata().unwrap().modified().unwrap(), filename))
         });
 
-        let mut collected: Vec<_> = filtered.collect();
+        let mut collected: Vec<_> = if let Some(id) = self.limited {
+            // Filter uploads by prefixes
+            let prefix = format!("{}.", id);
+            filtered.filter(|&(_, ref f)| f.starts_with(&prefix)).collect()
+        } else { filtered.collect() };
+
         collected.sort_unstable_by(|a,b| b.cmp(a));
 
         let iter = collected.iter().map(|&(_, ref f)| f);
@@ -138,6 +162,7 @@ impl Handler {
             &mut buf,
             aead::MAX_TAG_LEN)?;
         let mut result = String::with_capacity(12 * 2 + len * 2);
+
         for byte in &nonce {
             write!(&mut result as &mut std::fmt::Write, "{:02x}", byte).map_err(|_| Unspecified)?
         }
@@ -146,13 +171,70 @@ impl Handler {
         }
         Ok(result)
     }
+
+    fn try_decrypt_key(&self, key: &str) -> Option<i32> {
+        if key.len() % 2 != 0 || key.len() < 12 * 2 {
+            // Got no nounce
+            return None;
+        }
+
+        let data = &key[12*2..];
+        let mut nonce_vec: [u8; 12] = [0; 12];
+        let mut data_vec: Vec<u8> = Vec::with_capacity(data.len() / 2);
+
+        let result: Result<(), std::num::ParseIntError> = do catch {
+            for i in 0..12 {
+                nonce_vec[i] = u8::from_str_radix(&key[i*2..i*2+2], 16)?;
+            }
+
+            for i in 0..data.len() / 2 {
+                data_vec.push(u8::from_str_radix(&data[i*2..i*2+2], 16)?);
+            }
+            Ok(())
+        };
+        
+        if result.is_err() {
+            return None;
+        }
+
+        let result: Result<(), Unspecified> = do catch {
+            // Create a 256-bit hash of the master secret
+            let hash = digest::digest(&digest::SHA256, self.config.secret.as_bytes());
+
+            // Creating opening key
+            let opening_key = aead::OpeningKey::new(&aead::AES_256_GCM, hash.as_ref())?;
+
+
+            aead::open_in_place(
+                &opening_key,
+                &nonce_vec,
+                &[],
+                0,
+                &mut data_vec)?;
+            Ok(())
+        };
+
+        if result.is_err() {
+            return None;
+        }
+
+        Some(LittleEndian::read_i32(data_vec.as_slice()))
+    }
 }
 
 impl ws::Handler for Handler {
     fn on_open(&mut self, shake: Handshake) -> ws::Result<()> {
-        if shake.request.resource() == format!("/{}", self.config.secret) {
+        let res = shake.request.resource();
+        if res == format!("/{}", self.config.secret) {
+            // Is administrative account
             self.sender.send("{\"ok\":1}")?;
             return Ok(())
+        } else if res.len() > 1 && res.starts_with('/') {
+            if let Some(id) = self.try_decrypt_key(&res[1..]) {
+                self.limited = Some(id);
+                self.sender.send(format!("{{\"ok\":1,\"limited\":{}}}", id))?;
+                return Ok(())
+            }
         }
         self.sender.send("{\"ok\":0}")?;
         self.sender.close(ws::CloseCode::Normal)?;
@@ -176,6 +258,7 @@ impl ws::Handler for Handler {
             // Generate uuid
             let uuid = Uuid::new_v4();
             let basename = uuid.hyphenated();
+
             let ext = match data["ext"] {
                 Value::String(ref s) => s,
                 _ => {
@@ -183,7 +266,13 @@ impl ws::Handler for Handler {
                     return Ok(());
                 },
             };
-            let path = Path::new("static/store/").join(format!("{}.{}", basename, ext));
+
+            let fullname = if let Some(id) = self.limited {
+                format!("{}.{}.{}", id, basename, ext)
+            } else  {
+                format!("{}.{}", basename, ext)
+            };
+            let path = Path::new("static/store/").join(fullname);
             let opening = OpenOptions::new().write(true).create(true).open(path);
             self.uploading = match opening {
                 Ok(f) => Some(f),

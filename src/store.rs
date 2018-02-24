@@ -27,9 +27,16 @@ pub struct Entry {
     disbandment: Option<String>, // YYYY-MM-DD
 }
 
+impl Entry {
+    pub fn id(&self) -> i32 {
+        self.id
+    }
+}
+
 #[derive(Debug)]
 pub enum StoreError {
     NotFound,
+    Denied,
 }
 
 impl fmt::Display for StoreError {
@@ -42,6 +49,7 @@ impl Error for StoreError {
     fn description(&self) -> &'static str {
         match *self {
             StoreError::NotFound => "Entry not found",
+            StoreError::Denied => "Operation denied",
         }
     }
 }
@@ -108,10 +116,19 @@ impl InternalStore {
         Ok(())
     }
 
-    fn mem_put(&mut self, mut entry: Entry) -> Result<(i32, Vec<u8>), StoreError> {
+    fn mem_put(&mut self, mut entry: Entry, restricted: bool) -> Result<(i32, Vec<u8>), StoreError> {
         // TODO: recover from failure
 
         let original = self.entries.get(&entry.id);
+
+        if restricted {
+            match original {
+                None => return Err(StoreError::Denied),
+                Some(e) if e.disbandment.is_some() => return Err(StoreError::Denied),
+                _ => {}, // No-op
+            }
+        }
+
         if original.is_none() {
             let result = serde_json::to_vec(&entry).unwrap();
             let id = entry.id;
@@ -244,7 +261,7 @@ impl Store {
         let iter = store.db.iter(ReadOptions::new());
         for (_, slice) in iter {
             let entry: Entry = serde_json::from_slice(&slice).unwrap();
-            store.internal.mem_put(entry).unwrap();
+            store.internal.mem_put(entry, false).unwrap();
         }
         store
     }
@@ -254,8 +271,8 @@ impl Store {
         // TODO: try to drop self.db
     }
 
-    pub fn put(&mut self, entry: Entry) -> Result<(), StoreError> {
-        let (id, content) = self.internal.mem_put(entry)?;
+    pub fn put(&mut self, entry: Entry, restricted: bool) -> Result<(), StoreError> {
+        let (id, content) = self.internal.mem_put(entry, restricted)?;
         self.db.put(WriteOptions::new(), id, &content).unwrap();
         Ok(())
     }

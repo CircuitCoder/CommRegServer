@@ -7,3 +7,5 @@ static/store/*
 !static/store/.gitkeep
 
 config.yml
+
+*.sw[a-p]

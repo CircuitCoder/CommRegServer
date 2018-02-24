@@ -81,12 +81,17 @@ input.bottom-search {
   flex: 1;
 }
 
+.limited-id {
+  font-weight: 700;
+  flex: 1;
+}
+
 @keyframes syncing-rotate {
   0% {
     transform: rotate(0);
   }
   100% {
-    transform: rotate(180deg);
+    transform: rotate(-180deg);
   }
 }
 
@@ -420,6 +425,14 @@ textarea::placeholder {
 .img-slot:hover .img-slot-action {
   opacity: 1;
   transition: opacity .2s ease-out;
+}
+
+.locked .img-slot:hover .img-slot-action {
+  opacity: 0;
+}
+
+.locked .img-slot:hover .img-slot-action .icon-btn {
+  cursor: default;
 }
 
 .img-track {

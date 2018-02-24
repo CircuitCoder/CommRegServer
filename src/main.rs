@@ -6,6 +6,7 @@
 #![feature(option_filter)]
 #![feature(nll)]
 #![feature(conservative_impl_trait)]
+#![feature(catch_expr)]
 
 extern crate ws;
 extern crate rocket;
