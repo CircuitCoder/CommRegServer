@@ -57,7 +57,7 @@ impl Handler {
             Ok(d) => d,
         };
 
-        if self.limited.is_some() 
+        if self.limited.is_some()
             && Some(payload.id()) != self.limited {
 
             // Permission denied
@@ -91,11 +91,25 @@ impl Handler {
         Ok(())
     }
 
-    fn files(&self) -> ws::Result<()> {
+    fn files(&self, target: Value) -> ws::Result<()> {
         let iter = match read_dir(Path::new("./static/store")) {
-            Err(e) => return Err(err_to_wserr(e, "Not privleged to read director")),
+            Err(e) => return Err(err_to_wserr(e, "Not privleged to read directory")),
             Ok(i) => i,
         };
+
+        let mut entry = None;
+        if let Value::Number(n) = target {
+            if let Some(i) = n.as_i64() {
+                entry = Some(i as i32)
+            }
+        }
+
+        if self.limited.is_some() {
+            if self.limited != entry {
+                self.sender.send("{\"ok\":0}")?;
+                return Ok(())
+            }
+        }
 
         let filtered = iter.filter_map(|e| {
             let e = match e {
@@ -116,7 +130,7 @@ impl Handler {
                 .map(|filename| (e.metadata().unwrap().modified().unwrap(), filename))
         });
 
-        let mut collected: Vec<_> = if let Some(id) = self.limited {
+        let mut collected: Vec<_> = if let Some(id) = entry {
             // Filter uploads by prefixes
             let prefix = format!("{}.", id);
             filtered.filter(|&(_, ref f)| f.starts_with(&prefix)).collect()
@@ -192,7 +206,7 @@ impl Handler {
             }
             Ok(())
         };
-        
+
         if result.is_err() {
             return None;
         }
@@ -267,11 +281,29 @@ impl ws::Handler for Handler {
                 },
             };
 
-            let fullname = if let Some(id) = self.limited {
-                format!("{}.{}.{}", id, basename, ext)
-            } else  {
-                format!("{}.{}", basename, ext)
+            let mut entry: Option<i32> = None;
+            if let Value::Number(ref n) = data["entry"] {
+                if let Some(i) = n.as_i64() {
+                    entry = Some(i as i32);
+                };
             };
+
+            let entry = match entry {
+                Some(e) => e,
+                _ => {
+                    self.sender.send("{\"ok\":0}")?;
+                    return Ok(());
+                }
+            };
+
+            if let Some(id) = self.limited {
+                if id != entry {
+                    self.sender.send("{\"ok\":0}")?;
+                    return Ok(());
+                }
+            }
+
+            let fullname = format!("{}.{}.{}", entry, basename, ext);
             let path = Path::new("static/store/").join(fullname);
             let opening = OpenOptions::new().write(true).create(true).open(path);
             self.uploading = match opening {
@@ -281,7 +313,7 @@ impl ws::Handler for Handler {
             self.sender.send("{\"ok\":1}")?;
             Ok(())
         } else if data["cmd"] == "files" {
-            self.files()
+            self.files(data["entry"].clone())
         } else if data["cmd"] == "genKey" {
             let number = match data["target"] {
                 Value::Number(ref n) => {

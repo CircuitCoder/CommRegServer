@@ -57,11 +57,11 @@ function readAsTA(file) {
   });
 }
 
-async function uploadFile(dt) {
+async function uploadFile(dt, entry) {
   const segs = dt.name.split('.');
   const ext = segs[segs.length-1];
 
-  const createResult = await sendWait({ cmd: 'upload', ext });
+  const createResult = await sendWait({ cmd: 'upload', ext, entry });
   if(!createResult.ok) return false;
 
   const content = await readAsTA(dt);
@@ -110,7 +110,7 @@ const desc = {
     locked: false,
     entries: [],
     referenceEntries: [],
-    files: null,
+    fileStore: {},
     searchStr: '',
     // TODO: filtered changes when searchStr changes, or input loses focus
 
@@ -208,8 +208,9 @@ const desc = {
       // TODO: Syncdown will abort editing process
     },
 
-    async listFiles() {
-      this.files = await sendWait({ cmd: 'files' });
+    async listFiles(id) {
+      Vue.set(this.fileStore, id, await sendWait({ cmd: 'files', entry: id }));
+      console.log(this.fileStore);
     },
 
     findMaxId() {
@@ -323,18 +324,20 @@ const desc = {
 
     // Drag 'n Drop
     dragOver(ev) {
+      if(this.activeFile === null) return;
       if([...ev.dataTransfer.types].includes('Files'))
         ev.preventDefault();
     },
 
     async drop(ev) {
+      if(this.activeFile === null) return;
       if([...ev.dataTransfer.types].includes('Files'))
         ev.preventDefault();
       this.dragging = 0;
-      await this.upload(ev.dataTransfer.files);
+      await this.upload(ev.dataTransfer.files, this.activeFile.id);
     },
 
-    async upload(list) {
+    async upload(list, id) {
       this.uploading = 0;
       for(const f of list)
         if(f.type.indexOf('image/') === 0)
@@ -342,25 +345,26 @@ const desc = {
 
       for(const f of list)
         if(f.type.indexOf('image/') === 0) {
-          await uploadFile(f);
+          await uploadFile(f, id);
           --this.uploading;
         }
       // Upload finished, refresh list
-      await this.listFiles();
+      await this.listFiles(this.activeFile.id);
     },
 
     dragEnter(ev) {
+      if(this.activeFile === null) return;
       if([...ev.dataTransfer.types].includes('Files'))
         ++this.dragging;
     },
 
     dragLeave(ev) {
+      if(this.activeFile === null) return;
       if([...ev.dataTransfer.types].includes('Files'))
         --this.dragging;
     },
 
     addFile(entry) {
-      if(this.files === null) this.listFiles();
       setTimeout(() => {
         this.activeFile = entry;
       });
@@ -504,7 +508,6 @@ const desc = {
 
     filteredEntries() {
       let result = this.entries;
-      console.log(result);
       const segs = this.searchStr.split(' ');
       for(const seg of segs) {
         if(seg === "") continue;
@@ -520,6 +523,17 @@ const desc = {
         }
       }
       return result;
+    },
+
+    files() {
+      if(!this.activeFile) return null;
+      const id = this.activeFile.id;
+      if(!(id in this.fileStore)) {
+        Vue.set(this.fileStore, id, []);
+        this.listFiles(id);
+      }
+      console.log(this.fileStore);
+      return this.fileStore[id];
     },
   },
 
