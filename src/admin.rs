@@ -341,6 +341,21 @@ impl ws::Handler for Handler {
             }).to_string();
             self.sender.send(s)?;
             Ok(())
+        } else if data["cmd"] == "deleteFile" {
+            let filename = match data["target"] {
+                Value::String(ref s) => s,
+                _ => {
+                    self.sender.send("{\"ok\":0}")?;
+                    return Ok(());
+                },
+            };
+            let path = Path::new("static/store/").join(filename);
+            if let Err(e) = remove_file(path) {
+                self.sender.send("{\"ok\":0}")?;
+            } else {
+                self.sender.send("{\"ok\":1}")?;
+            }
+            Ok(())
         } else {
             Ok(())
         }

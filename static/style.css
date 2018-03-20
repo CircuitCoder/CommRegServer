@@ -418,8 +418,12 @@ textarea::placeholder {
   transition: opacity .2s ease-in;
 }
 
-.img-slot-action > .icon-btn {
+.img-slot-action > .material-icons {
   color: white;
+}
+
+.img-slot-action > .material-icons.overlap-icon {
+  opacity: .54;
 }
 
 .img-slot:hover .img-slot-action {

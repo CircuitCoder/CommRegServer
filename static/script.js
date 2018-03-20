@@ -123,6 +123,17 @@ const desc = {
     dragging: 0,
     uploading: false,
     pendingDeletion: null,
+
+    ctrlDown: false,
+  },
+  created() {
+    window.addEventListener('keydown', e => {
+      if(e.key === 'Control') this.ctrlDown = true;
+      console.log(this.ctrlDown);
+    });
+    window.addEventListener('keyup', e => {
+      if(e.key === 'Control') this.ctrlDown = false;
+    });
   },
   methods: {
     connect() {
@@ -467,6 +478,17 @@ const desc = {
     discardAll() {
       this.discardDeletion();
       this.discardFile();
+    },
+
+    dispatchFileAction(file) {
+      if(!this.ctrlDown) this.insertFile(file);
+      else this.fullDeleteFile(file);
+    },
+
+    async fullDeleteFile(file) {
+      let id = this.activeFile.id;
+      await sendWait({ cmd: 'deleteFile', target: file });
+      await this.listFiles(id);
     },
   },
 
