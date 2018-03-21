@@ -23,14 +23,26 @@ impl<'a> FromParam<'a> for Availability {
 
 #[get("/<avail>/<search>", rank=2)]
 fn list(store: State<&RwLock<Store>>, avail: Availability, search: &RawStr) -> Result<Json<Vec<Entry>>, Utf8Error> {
-    Ok(Json(store.read()
+    let mut result = store.read()
         .unwrap()
-        .filter(Some(avail), Some(search.url_decode()?.split(' ')))))
+        .filter(Some(avail), Some(search.url_decode()?.split(' ')));
+
+    for mut e in result.iter_mut() {
+        e.desc += "\n\n";
+        e.desc += &e.desc_eng;
+    }
+
+    Ok(Json(result))
 }
 
 #[get("/<avail>", rank=2)]
 fn list_all(store: State<&RwLock<Store>>, avail: Availability) -> Json<Vec<Entry>> {
-    Json(store.read().unwrap().filter::<Split<&str>>(Some(avail), None))
+    let mut result = store.read().unwrap().filter::<Split<&str>>(Some(avail), None);
+    for mut e in result.iter_mut() {
+        e.desc += "\n\n";
+        e.desc += &e.desc_eng;
+    }
+    Json(result)
 }
 
 #[get("/fetch/<id>")]

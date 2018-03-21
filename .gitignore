@@ -5,6 +5,7 @@
 db/
 static/store/*
 !static/store/.gitkeep
+!static/store/default_logo.png
 
 config.yml
 

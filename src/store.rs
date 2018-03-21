@@ -21,8 +21,8 @@ pub struct Entry {
     name_eng: String, // English name
     category: String, // Category
     tags: Vec<String>, // Tags
-    desc: String, // Description
-    desc_eng: String, // English description
+    pub desc: String, // Description
+    pub desc_eng: String, // English description
     files: Vec<String>, // Files
     icon: Option<String>, // File used as icon
     creation: String, // YYYY-MM-DD
@@ -64,8 +64,8 @@ impl RawEntry {
             tags,
             desc: self.desc,
             desc_eng: self.desc_eng,
-            files: vec![],
-            icon: None,
+            files: vec!["default_logo.png".to_owned()],
+            icon: Some("default_logo.png".to_owned()),
             creation: self.creation,
             disbandment: self.disbandment,
         }
