@@ -14,6 +14,7 @@ typedef struct {
 } CJiebaWord;
 
 CJiebaWord* Cut(Jieba handle, const char* sentence, size_t len);
+CJiebaWord* CutForSearch(Jieba handle, const char* sentence, size_t len);
 
 CJiebaWord* CutWithoutTagName(Jieba, const char*, size_t, const char*);
 

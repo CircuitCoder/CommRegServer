@@ -19,6 +19,19 @@ ws = "*"
 uuid = { version = "*", features = ["v4"] }
 ring = "0.11.0"
 byteorder = "*"
+csv = "1.0.0-beta.5"
 
 [features]
 default = ['clippy']
+
+[lib]
+name = "crs"
+path = "src/lib.rs"
+
+[[bin]]
+name = "import"
+path = "src/bin/import.rs"
+
+[[bin]]
+name = "server"
+path = "src/main.rs"

@@ -24,7 +24,30 @@ CJiebaWord* Cut(Jieba handle, const char* sentence, size_t len) {
   vector<string> words;
   string s(sentence, len);
   x->Cut(s, words);
-  
+
+  CJiebaWord* res = (CJiebaWord*)malloc(sizeof(CJiebaWord) * (words.size() + 1));
+  size_t offset = 0;
+  for (size_t i = 0; i < words.size(); i++) {
+    res[i].word = sentence + offset;
+    res[i].len = words[i].size();
+    offset += res[i].len;
+  }
+  if (offset != len) {
+    free(res);
+    return NULL;
+  }
+  res[words.size()].word = NULL;
+  res[words.size()].len = 0;
+  return res;
+}
+
+// FIXME: this won't work
+CJiebaWord* CutForSearch(Jieba handle, const char* sentence, size_t len) {
+  cppjieba::Jieba* x = (cppjieba::Jieba*)handle;
+  vector<string> words;
+  string s(sentence, len);
+  x->CutForSearch(s, words);
+
   CJiebaWord* res = (CJiebaWord*)malloc(sizeof(CJiebaWord) * (words.size() + 1));
   size_t offset = 0;
   for (size_t i = 0; i < words.size(); i++) {
@@ -81,8 +104,8 @@ Extractor NewExtractor(const char* dict_path,
       const char* idf_path,
       const char* stop_word_path,
       const char* user_dict_path) {
-  Extractor handle = (Extractor)(new cppjieba::KeywordExtractor(dict_path, 
-          hmm_path, 
+  Extractor handle = (Extractor)(new cppjieba::KeywordExtractor(dict_path,
+          hmm_path,
           idf_path,
           stop_word_path,
           user_dict_path));

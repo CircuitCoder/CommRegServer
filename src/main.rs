@@ -1,10 +1,11 @@
 #![feature(plugin)]
 #![plugin(rocket_codegen)]
-#![cfg_attr(feature="clippy", plugin(clippy))]
+// #![cfg_attr(feature="clippy", plugin(clippy))]
+// Now clippy causes ICE
 
 #![feature(integer_atomics)]
 #![feature(option_filter)]
-#![feature(nll)] // Causes ICE. See rust-lang/rust #48132
+#![feature(nll)]
 #![feature(conservative_impl_trait)]
 #![feature(catch_expr)]
 
@@ -84,8 +85,6 @@ fn boot_web() {
 
 fn boot_ws() {
     std::thread::spawn(|| {
-        // Because of the ICE mentioned earlier, Pinging is not working right now
-        /*
         let server = WebSocket::new(|sender|
                                     admin::Handler::new(sender, &STORE, &CONFIG)).unwrap();
 
@@ -100,9 +99,6 @@ fn boot_ws() {
         });
 
         server.listen(format!("{}:{}", CONFIG.ws.host, CONFIG.ws.port)).unwrap();
-        */
-        ws::listen(format!("{}:{}", CONFIG.ws.host, CONFIG.ws.port),
-            |sender| admin::Handler::new(sender, &STORE, &CONFIG)).unwrap();
     });
 }
 

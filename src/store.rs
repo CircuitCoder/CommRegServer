@@ -14,13 +14,15 @@ pub enum Availability {
     Disbanded,
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Entry {
     id: i32, // Integer ID
     name: String, // Name
+    name_eng: String, // English name
     category: String, // Category
     tags: Vec<String>, // Tags
     desc: String, // Description
+    desc_eng: String, // English description
     files: Vec<String>, // Files
     icon: Option<String>, // File used as icon
     creation: String, // YYYY-MM-DD
@@ -30,6 +32,43 @@ pub struct Entry {
 impl Entry {
     pub fn id(&self) -> i32 {
         self.id
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct RawEntry {
+    name: String,
+    name_eng: String,
+    category: String,
+    tags: String,
+    desc: String,
+    desc_eng: String,
+    creation: String, // YYYY-MM-DD
+    disbandment: Option<String>, // YYYY-MM-DD
+}
+
+impl RawEntry {
+    pub fn extend(self, id: i32) -> Entry {
+        let trimmed = self.tags.trim();
+        let tags = if trimmed == "" {
+            vec![]
+        } else {
+            self.tags.split(" ").map(str::to_owned).collect()
+        };
+
+        Entry {
+            id,
+            name: self.name,
+            name_eng: self.name_eng,
+            category: self.category,
+            tags,
+            desc: self.desc,
+            desc_eng: self.desc_eng,
+            files: vec![],
+            icon: None,
+            creation: self.creation,
+            disbandment: self.disbandment,
+        }
     }
 }
 
@@ -238,6 +277,10 @@ impl InternalStore {
     fn fetch(&self, id: i32) -> Option<Entry> {
         self.entries.get(&id).cloned()
     }
+
+    fn highest_id(&self) -> i32 {
+        self.entries.keys().max().cloned().unwrap_or(0)
+    }
 }
 
 pub struct Store {
@@ -289,5 +332,9 @@ impl Store {
 
     pub fn fetch(&self, id: i32) -> Option<Entry> {
         self.internal.fetch(id)
+    }
+
+    pub fn highest_id(&self) -> i32 {
+        self.internal.highest_id()
     }
 }
