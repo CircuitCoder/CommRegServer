@@ -129,7 +129,6 @@ const desc = {
   created() {
     window.addEventListener('keydown', e => {
       if(e.key === 'Control') this.ctrlDown = true;
-      console.log(this.ctrlDown);
     });
     window.addEventListener('keyup', e => {
       if(e.key === 'Control') this.ctrlDown = false;
@@ -295,6 +294,7 @@ const desc = {
       this.activeTag.tags.sort();
       if(this.activeTagInput) {
         this.activeTagInput.value = '';
+        this.activeTagInput.focus();
         this.tagFilter = '';
       }
     },
@@ -440,13 +440,12 @@ const desc = {
 
     manualUpload() {
       this.$refs.fileSelector.click();
-      this.waitForInput
     },
 
     doUpload() {
       if(this.$refs.fileSelector.value === '') // Already empty
         return;
-      this.upload(this.$refs.fileSelector.files);
+      this.upload(this.$refs.fileSelector.files, this.activeFile.id);
       this.$refs.fileSelector.value = '';
     },
 

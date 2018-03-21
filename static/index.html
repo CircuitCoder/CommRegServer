@@ -135,7 +135,7 @@
             <i class="material-icons" v-if="locked">lock</i>
             </div>
           </div>
-          <div class="bottom-sheet" :class="{ active: activeCategory !== null }">
+          <div class="bottom-sheet" :class="{ active: activeCategory !== null }" @mousedown.prevent>
             <div class="inner">
               <div class="title">Select a Category</div>
               <div class="text-btn-group">
@@ -144,7 +144,7 @@
               <div class="hint">Arbitary categories can be inserted by typing directly into the field</div>
             </div>
           </div>
-          <div class="bottom-sheet" :class="{ active: activeTag !== null }">
+          <div class="bottom-sheet" :class="{ active: activeTag !== null }" @mousedown.prevent>
             <div class="inner">
               <div class="title">Frequently Used Tags
                 <span class="tag-filter" v-if="tagFilter !== ''">Starting With <span class="tag-filter-content">{{ tagFilter }}</span></span>
@@ -158,7 +158,7 @@
               <div class="hint">Your frequently used tags will show up here. Typing in the field can filter this list.</div>
             </div>
           </div>
-          <div class="bottom-sheet" :class="{ active: activeFile !== null }">
+          <div class="bottom-sheet" :class="{ active: activeFile !== null }" @click.stop>
             <div class="inner">
               <div class="title">File Library</div>
               <div class="hint">You can upload files by dropping them into this page, or use the upload button below.</div>
@@ -172,7 +172,7 @@
                     <i class="material-icons overlap-icon">delete</i>
                   </div>
                 </div>
-                <input type="file" ref="fileSelector" class="file-selector" @change="doUpload()" accept="image/*">
+                <input type="file" ref="fileSelector" class="file-selector" @change="doUpload()" accept="image/*" @click.stop>
               </div>
             </div>
           </div>
