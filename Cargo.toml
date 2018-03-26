@@ -20,6 +20,7 @@ uuid = { version = "*", features = ["v4"] }
 ring = "0.11.0"
 byteorder = "*"
 csv = "1.0.0-beta.5"
+jieba = { path = "deps/jieba" }
 
 [features]
 default = ['clippy']

@@ -8,8 +8,11 @@ fn main() {
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
 
     cc::Build::new()
-        .file("lib/lib/jieba.cpp")
+        .file("impl/jieba.cpp")
+        .cpp(true)
+        .flag_if_supported("-std=c++14")
         .define("LOGGING_LEVEL", "LL_WARNING")
+        .include("lib/include")
         .include("lib/deps")
         .out_dir(out_path.clone())
         .compile("libjieba.a");
@@ -18,9 +21,7 @@ fn main() {
     println!("cargo:rustc-link-lib=static=jieba");
 
     let bindings = bindgen::Builder::default()
-        .header("lib/lib/jieba.h")
-        .clang_arg("-Ilib/deps")
-        .generate_comments(true)
+        .header("impl/jieba.h")
         .generate()
         .expect("Unable to generate bindings");
     bindings

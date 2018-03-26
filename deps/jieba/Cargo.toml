@@ -7,7 +7,3 @@ build = "src/build.rs"
 [build-dependencies]
 bindgen = "0.33.2"
 cc = "*"
-
-[lib]
-name = "jieba"
-path = "src/lib.rs"

@@ -31,6 +31,8 @@ extern crate uuid;
 extern crate ring;
 extern crate byteorder;
 
+extern crate jieba;
+
 mod store;
 mod query;
 mod admin;

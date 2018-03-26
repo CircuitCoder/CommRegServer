@@ -8,6 +8,11 @@ use std::collections::hash_map::Entry::*;
 use std::error::Error;
 use std::fmt;
 use std::path::Path;
+use jieba::Jieba;
+
+lazy_static! {
+    pub static ref JIEBA: Jieba = Jieba::new(Path::new("./deps/jieba/lib/dict")).unwrap();
+}
 
 pub enum Availability {
     Available,
@@ -76,6 +81,7 @@ impl RawEntry {
 pub enum StoreError {
     NotFound,
     Denied,
+    InvalidString,
 }
 
 impl fmt::Display for StoreError {
@@ -89,6 +95,7 @@ impl Error for StoreError {
         match *self {
             StoreError::NotFound => "Entry not found",
             StoreError::Denied => "Operation denied",
+            StoreError::InvalidString => "Invalid String: contains NUL",
         }
     }
 }
@@ -96,6 +103,7 @@ impl Error for StoreError {
 #[derive(Hash, PartialEq, Eq)]
 pub enum IndexType {
     Name,
+    NameSeg,
     Category,
     Tag,
 }
@@ -104,8 +112,9 @@ impl IndexType {
     pub fn score(&self) -> u64 {
         match *self {
             IndexType::Name => 10,
+            IndexType::NameSeg => 1,
             IndexType::Category => 5,
-            IndexType::Tag => 1,
+            IndexType::Tag => 2,
         }
     }
 }
@@ -128,6 +137,32 @@ struct InternalStore {
 }
 
 impl InternalStore {
+    fn add_name_seg(&mut self, name: String, id: i32) -> Result<(), StoreError> {
+        let segs = match JIEBA.cut_for_search(&name) {
+            Err(_) => return Err(StoreError::InvalidString),
+            Ok(s) => s,
+        };
+
+        for seg in segs.iter() {
+            self.add_index(seg.to_owned(), Index::new(id, IndexType::NameSeg));
+        };
+
+        Ok(())
+    }
+
+    fn del_name_seg(&mut self, name: String, id: i32) -> Result<(), StoreError> {
+        let segs = match JIEBA.cut_for_search(&name) {
+            Err(_) => return Err(StoreError::InvalidString),
+            Ok(s) => s,
+        };
+
+        for seg in segs.iter() {
+            self.del_index(seg.to_owned(), &Index::new(id, IndexType::NameSeg));
+        };
+
+        Ok(())
+    }
+
     fn add_index(&mut self, key: String, target: Index) -> bool {
         let entry = self.index.entry(key).or_insert_with(HashSet::new);
         entry.insert(target)
@@ -147,6 +182,7 @@ impl InternalStore {
         };
 
         self.del_index(entry.name.clone(), &Index::new(entry.id, IndexType::Name));
+        self.del_name_seg(entry.name.clone(), entry.id)?;
         self.del_index(entry.category.clone(), &Index::new(entry.id, IndexType::Category));
         for tag in &entry.tags {
             self.del_index(tag.clone(), &Index::new(entry.id, IndexType::Tag));
@@ -172,6 +208,7 @@ impl InternalStore {
             let result = serde_json::to_vec(&entry).unwrap();
             let id = entry.id;
             self.add_index(entry.name.clone(), Index::new(entry.id, IndexType::Name));
+            self.add_name_seg(entry.name.clone(), entry.id)?;
             self.add_index(entry.category.clone(), Index::new(entry.id, IndexType::Category));
             for tag in &entry.tags {
                 self.add_index(tag.clone(), Index::new(entry.id, IndexType::Tag));
@@ -184,6 +221,9 @@ impl InternalStore {
         if entry.name != original.name {
             self.del_index(original.name.clone(), &Index::new(entry.id, IndexType::Name));
             self.add_index(entry.name.clone(), Index::new(entry.id, IndexType::Name));
+
+            self.del_name_seg(original.name.clone(), entry.id)?;
+            self.add_name_seg(entry.name.clone(), entry.id)?;
         }
         if entry.category != original.category {
             self.del_index(original.category.clone(), &Index::new(entry.id, IndexType::Category));
@@ -241,8 +281,11 @@ impl InternalStore {
     fn filter<'a, T: Iterator<Item=&'a str>>(&self, avail: Option<Availability>, keywords: Option<T>) -> Vec<Entry> {
         // TODO: Impl
         let mut hash: HashMap<i32,i64> = HashMap::new();
-        let buckets = if let Some(iter) = keywords {
-            iter.filter_map(|k| self.index.get(k))
+        let words = if let Some(iter) = keywords {
+            iter.filter_map(|k| {
+                let s = k.clone();
+                JIEBA.cut_for_search(&s).ok()
+            })
         } else {
             let mut result: Vec<Entry> = match avail {
                 None => self.entries.values().cloned().collect(),
@@ -256,9 +299,12 @@ impl InternalStore {
             return result;
         };
 
-        for bucket in buckets {
-            for &Index{ ref id, ref t } in bucket {
-                *(hash.entry(*id).or_insert(0)) += t.score() as i64;
+        for word in words {
+            let buckets = word.iter().filter_map(|k| self.index.get(k));
+            for bucket in buckets {
+                for &Index{ ref id, ref t } in bucket {
+                    *(hash.entry(*id).or_insert(0)) += t.score() as i64;
+                };
             };
         };
 
