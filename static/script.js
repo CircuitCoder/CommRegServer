@@ -421,30 +421,35 @@ const desc = {
         entry.icon = null;
 
       // Update desc
-      // TODO: update english version
-      let segs = entry.desc.split('\n');
+      let zhSegs = entry.desc.split('\n');
+      let enSegs = entry.desc_eng.split('\n');
 
-      for(let i = 0; i < segs.length; ++i) {
-        const frontEmpty = i === 0 || segs[i-1] === '';
-        const backEmpty = i === segs.length-1 || segs[i+1] === '';
-        if(frontEmpty && backEmpty) {
-          // Check for syntax
-          let result = segs[i].match(/^<(\d+)>$/);
-          if(!result) continue;
-          let id = parseInt(result[1], 10);
-          if(id === index+1) {
-            if(i === 0) {
-              segs.splice(i, 2); // Removes this one
-              --i;
-            } else {
-              segs.splice(i-1, 2); // Removes this one
-              i-=2;
-            }
-          } else if(id > index+1) segs[i] = `<${id-1}>`;
+      let processSegs = (segs) => {
+        for(let i = 0; i < segs.length; ++i) {
+          const frontEmpty = i === 0 || segs[i-1] === '';
+          const backEmpty = i === segs.length-1 || segs[i+1] === '';
+          if(frontEmpty && backEmpty) {
+            // Check for syntax
+            let result = segs[i].match(/^<(\d+)>$/);
+            if(!result) continue;
+            let id = parseInt(result[1], 10);
+            if(id === index+1) {
+              if(i === 0) {
+                segs.splice(i, 2); // Removes this one
+                --i;
+              } else {
+                segs.splice(i-1, 2); // Removes this one
+                i-=2;
+              }
+            } else if(id > index+1) segs[i] = `<${id-1}>`;
+          }
         }
-      }
+      };
 
-      entry.desc = segs.filter(e => e !== null).join('\n');
+      entry.desc =
+        processSegs(zhSegs).filter(e => e !== null).join('\n');
+      entry.desc =
+        processSegs(enSegs).filter(e => e !== null).join('\n');
     },
 
     setIcon(entry, file) {
@@ -555,6 +560,7 @@ const desc = {
         } else {
           result = result.filter(e =>
             e.name.indexOf(seg) !== -1
+            || e.name_eng.indexOf(seg) !== -1
             || e.category === seg
             || e.tags.includes(seg)
           );

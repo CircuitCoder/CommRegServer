@@ -143,7 +143,7 @@ impl Index {
 
 struct InternalStore {
     entries: HashMap<i32, Entry>,
-    index: HashMap<String, HashSet<Index>>,
+    index: HashMap<String, HashMap<Index, i64>>,
 }
 
 impl InternalStore {
@@ -171,22 +171,34 @@ impl InternalStore {
         };
 
         for seg in segs.iter() {
-            self.del_index(seg.to_owned(), &Index::new(id, IndexType::NameSeg));
+            self.del_index(seg.to_owned(), Index::new(id, IndexType::NameSeg));
         };
 
         Ok(())
     }
 
-    fn add_index(&mut self, key: String, target: Index) -> bool {
-        let entry = self.index.entry(key).or_insert_with(HashSet::new);
-        entry.insert(target)
+    fn add_index(&mut self, key: String, target: Index) {
+        let entry = self.index.entry(key).or_insert_with(HashMap::new);
+        *(entry.entry(target).or_insert(0)) += 1;
     }
 
-    fn del_index(&mut self, key: String, target: &Index) -> bool {
-        match self.index.entry(key) {
-            Vacant(_) => false,
-            Occupied(ref mut entry) => entry.get_mut().remove(target)
-        }
+    fn del_index(&mut self, key: String, target: Index) -> bool {
+        let mut entry = match self.index.entry(key) {
+            Vacant(_) => return false,
+            Occupied(mut entry) => entry
+        };
+
+        let mut inner = match entry.get_mut().entry(target) {
+            Vacant(_) => return false,
+            Occupied(mut entry) => entry
+        };
+
+        let content = inner.get_mut();
+        *content -= 1;
+        if *content == 0 {
+            inner.remove_entry();
+        };
+        true
     }
 
     fn mem_del(&mut self, id: i32) -> Result<Vec<u8>, StoreError> {
@@ -197,16 +209,22 @@ impl InternalStore {
 
         let entry = entry.get_mut();
 
-        self.del_index(entry.name.clone(), &Index::new(entry.id, IndexType::Name));
+        self.del_index(entry.name.clone(), Index::new(entry.id, IndexType::Name));
+        self.del_index(entry.name_eng.clone(), Index::new(entry.id, IndexType::Name));
         self.del_name_seg(entry.name.clone(), entry.id)?;
-        self.del_index(entry.category.clone(), &Index::new(entry.id, IndexType::Category));
+        self.del_name_seg(entry.name_eng.clone(), entry.id)?;
+        self.del_index(entry.category.clone(), Index::new(entry.id, IndexType::Category));
         for tag in &entry.tags {
-            self.del_index(tag.clone(), &Index::new(entry.id, IndexType::Tag));
+            self.del_index(tag.clone(), Index::new(entry.id, IndexType::Tag));
         }
 
         entry.deleted = true;
         let result = serde_json::to_vec(entry).unwrap();
         Ok(result)
+    }
+
+    fn mem_load(&mut self, entry: Entry) {
+        self.entries.insert(entry.id, entry);
     }
 
     fn mem_put(&mut self, mut entry: Entry, restricted: bool) -> Result<(i32, Vec<u8>), StoreError> {
@@ -226,7 +244,9 @@ impl InternalStore {
             let result = serde_json::to_vec(&entry).unwrap();
             let id = entry.id;
             self.add_index(entry.name.clone(), Index::new(entry.id, IndexType::Name));
+            self.add_index(entry.name_eng.clone(), Index::new(entry.id, IndexType::Name));
             self.add_name_seg(entry.name.clone(), entry.id)?;
+            self.add_name_seg(entry.name_eng.clone(), entry.id)?;
             self.add_index(entry.category.clone(), Index::new(entry.id, IndexType::Category));
             for tag in &entry.tags {
                 self.add_index(tag.clone(), Index::new(entry.id, IndexType::Tag));
@@ -242,14 +262,23 @@ impl InternalStore {
         };
 
         if entry.name != original.name {
-            self.del_index(original.name.clone(), &Index::new(entry.id, IndexType::Name));
+            self.del_index(original.name.clone(), Index::new(entry.id, IndexType::Name));
             self.add_index(entry.name.clone(), Index::new(entry.id, IndexType::Name));
 
             self.del_name_seg(original.name.clone(), entry.id)?;
             self.add_name_seg(entry.name.clone(), entry.id)?;
         }
+
+        if entry.name_eng != original.name_eng {
+            self.del_index(original.name_eng.clone(), Index::new(entry.id, IndexType::Name));
+            self.add_index(entry.name_eng.clone(), Index::new(entry.id, IndexType::Name));
+
+            self.del_name_seg(original.name_eng.clone(), entry.id)?;
+            self.add_name_seg(entry.name_eng.clone(), entry.id)?;
+        }
+
         if entry.category != original.category {
-            self.del_index(original.category.clone(), &Index::new(entry.id, IndexType::Category));
+            self.del_index(original.category.clone(), Index::new(entry.id, IndexType::Category));
             self.add_index(entry.category.clone(), Index::new(entry.id, IndexType::Category));
         }
 
@@ -265,7 +294,7 @@ impl InternalStore {
             let otag_content;
             if ctag.is_none() {
                 while let Some(tag) = otag {
-                    self.del_index(tag.clone(), &Index::new(entry.id, IndexType::Tag));
+                    self.del_index(tag.clone(), Index::new(entry.id, IndexType::Tag));
                     otag = otags.next();
                 }
                 break;
@@ -287,7 +316,7 @@ impl InternalStore {
                 ctag = ctags.next();
                 otag = otags.next();
             } else if otag_content < ctag_content {
-                self.del_index(otag_content, &Index::new(entry.id, IndexType::Tag));
+                self.del_index(otag_content, Index::new(entry.id, IndexType::Tag));
                 otag = otags.next();
             } else {
                 self.add_index(ctag_content, Index::new(entry.id, IndexType::Tag));
@@ -335,8 +364,9 @@ impl InternalStore {
         for word in words {
             let buckets = word.iter().filter_map(|k| self.index.get(k));
             for bucket in buckets {
-                for &Index{ ref id, ref t } in bucket {
-                    *(hash.entry(*id).or_insert(0)) += t.score() as i64;
+                for (&Index{ ref id, ref t }, &count) in bucket.iter() {
+                    *(hash.entry(*id).or_insert(0)) +=
+                        (t.score() as i64)*count;
                 };
             };
         };
@@ -388,7 +418,11 @@ impl Store {
         let iter = store.db.iter(ReadOptions::new());
         for (_, slice) in iter {
             let entry: Entry = serde_json::from_slice(&slice).unwrap();
-            store.internal.mem_put(entry, false).unwrap();
+            if entry.deleted {
+                store.internal.mem_load(entry);
+            } else {
+                store.internal.mem_put(entry, false).unwrap();
+            }
         }
         store
     }
