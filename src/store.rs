@@ -10,6 +10,10 @@ use std::fmt;
 use std::path::Path;
 use jieba::Jieba;
 
+fn get_false() -> bool {
+    false
+}
+
 lazy_static! {
     pub static ref JIEBA: Jieba = Jieba::new(Path::new("./deps/jieba/lib/dict")).unwrap();
 }
@@ -32,6 +36,9 @@ pub struct Entry {
     icon: Option<String>, // File used as icon
     creation: String, // YYYY-MM-DD
     disbandment: Option<String>, // YYYY-MM-DD
+
+    #[serde(default = "get_false")]
+    deleted: bool,
 }
 
 impl Entry {
@@ -73,6 +80,7 @@ impl RawEntry {
             icon: None,
             creation: self.creation,
             disbandment: self.disbandment,
+            deleted: false,
         }
     }
 }
@@ -82,6 +90,7 @@ pub enum StoreError {
     NotFound,
     Denied,
     InvalidString,
+    DeletedEntry,
 }
 
 impl fmt::Display for StoreError {
@@ -96,6 +105,7 @@ impl Error for StoreError {
             StoreError::NotFound => "Entry not found",
             StoreError::Denied => "Operation denied",
             StoreError::InvalidString => "Invalid String: contains NUL",
+            StoreError::DeletedEntry => "Deleted entries cannot be modified",
         }
     }
 }
@@ -137,6 +147,10 @@ struct InternalStore {
 }
 
 impl InternalStore {
+    fn len(&self) -> i32 {
+        self.entries.len() as i32
+    }
+
     fn add_name_seg(&mut self, name: String, id: i32) -> Result<(), StoreError> {
         let segs = match JIEBA.cut_for_search(&name) {
             Err(_) => return Err(StoreError::InvalidString),
@@ -175,11 +189,13 @@ impl InternalStore {
         }
     }
 
-    fn mem_del(&mut self, id: i32) -> Result<(), StoreError> {
-        let (_, entry) = match self.entries.entry(id) {
+    fn mem_del(&mut self, id: i32) -> Result<Vec<u8>, StoreError> {
+        let mut entry = match self.entries.entry(id) {
             Vacant(_) => return Err(StoreError::NotFound),
-            Occupied(entry)  => entry.remove_entry(),
+            Occupied(mut entry)  => entry,
         };
+
+        let entry = entry.get_mut();
 
         self.del_index(entry.name.clone(), &Index::new(entry.id, IndexType::Name));
         self.del_name_seg(entry.name.clone(), entry.id)?;
@@ -188,7 +204,9 @@ impl InternalStore {
             self.del_index(tag.clone(), &Index::new(entry.id, IndexType::Tag));
         }
 
-        Ok(())
+        entry.deleted = true;
+        let result = serde_json::to_vec(entry).unwrap();
+        Ok(result)
     }
 
     fn mem_put(&mut self, mut entry: Entry, restricted: bool) -> Result<(i32, Vec<u8>), StoreError> {
@@ -218,6 +236,11 @@ impl InternalStore {
         }
 
         let original = original.unwrap().clone();
+
+        if original.deleted {
+            return Err(StoreError::DeletedEntry);
+        };
+
         if entry.name != original.name {
             self.del_index(original.name.clone(), &Index::new(entry.id, IndexType::Name));
             self.add_index(entry.name.clone(), Index::new(entry.id, IndexType::Name));
@@ -278,7 +301,11 @@ impl InternalStore {
         Ok((id, result))
     }
 
-    fn filter<'a, T: Iterator<Item=&'a str>>(&self, avail: Option<Availability>, keywords: Option<T>) -> Vec<Entry> {
+    fn filter<'a, T: Iterator<Item=&'a str>>(
+        &self,
+        avail: Option<Availability>,
+        keywords: Option<T>,
+        sort_by_id: bool) -> Vec<Entry> {
         // TODO: Impl
         let mut hash: HashMap<i32,i64> = HashMap::new();
         let words = if let Some(iter) = keywords {
@@ -287,15 +314,21 @@ impl InternalStore {
                 JIEBA.cut_for_search(&s).ok()
             })
         } else {
+            let source = self.entries.values().filter(|e| !e.deleted);
             let mut result: Vec<Entry> = match avail {
-                None => self.entries.values().cloned().collect(),
+                None => source.cloned().collect(),
                 Some(Availability::Available) =>
-                    self.entries.values().filter(|e| e.disbandment.is_none()).cloned().collect(),
+                    source.filter(|e| e.disbandment.is_none()).cloned().collect(),
                 Some(Availability::Disbanded) =>
-                    self.entries.values().filter(|e| e.disbandment.is_some()).cloned().collect(),
+                    source.filter(|e| e.disbandment.is_some()).cloned().collect(),
             };
 
-            result.sort_unstable_by(|a,b| { a.name.cmp(&b.name) });
+            if sort_by_id {
+                result.sort_unstable_by_key(|a| { a.id });
+            } else {
+                result.sort_unstable_by(|a, b| { a.name.cmp(&b.name) });
+            }
+
             return result;
         };
 
@@ -309,7 +342,12 @@ impl InternalStore {
         };
 
         let mut ids: Vec<i32> = hash.keys().cloned().collect();
-        ids.sort_unstable_by_key(|i| { (-hash[i], &self.entries[i].name) }); // Sort by name
+
+        if sort_by_id {
+            ids.sort_unstable_by_key(|i| { (-hash[i], i.clone()) });
+        } else {
+            ids.sort_unstable_by_key(|i| { (-hash[i], &self.entries[i].name) });
+        }
 
         let it = ids.iter().map(|i| &self.entries[i]);
         if let Some(a) = avail {
@@ -360,6 +398,10 @@ impl Store {
         // TODO: try to drop self.db
     }
 
+    pub fn len(&self) -> i32 {
+        self.internal.len()
+    }
+
     pub fn put(&mut self, entry: Entry, restricted: bool) -> Result<(), StoreError> {
         let (id, content) = self.internal.mem_put(entry, restricted)?;
         self.db.put(WriteOptions::new(), id, &content).unwrap();
@@ -367,13 +409,17 @@ impl Store {
     }
 
     pub fn del(&mut self, id: i32) -> Result<(), StoreError> {
-        self.internal.mem_del(id)?;
-        self.db.delete(WriteOptions::new(), id).unwrap();
+        let entry = self.internal.mem_del(id)?;
+        self.db.put(WriteOptions::new(), id, &entry).unwrap();
         Ok(())
     }
 
-    pub fn filter<'a, T: Iterator<Item=&'a str>>(&self, avail: Option<Availability>, keywords: Option<T>) -> Vec<Entry> {
-        self.internal.filter(avail, keywords)
+    pub fn filter<'a, T: Iterator<Item=&'a str>>(
+        &self,
+        avail: Option<Availability>,
+        keywords: Option<T>,
+        sort_by_id: bool) -> Vec<Entry> {
+        self.internal.filter(avail, keywords, sort_by_id)
     }
 
     pub fn fetch(&self, id: i32) -> Option<Entry> {

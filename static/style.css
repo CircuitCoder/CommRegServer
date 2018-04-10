@@ -231,12 +231,36 @@ textarea::placeholder {
   cursor: pointer;
 }
 
-.action:hover {
+.action:hover, .action-group .action:hover {
   opacity: 1;
 }
 
-.action .material-icons {
+.action-group {
+  font-size: 12px;
+  line-height: 16px;
+  display: inline-flex;
+
+  align-items: center;
+}
+
+.action-group .action {
+  margin-left: 5px;
+}
+
+.action-group.switch .action {
+  opacity: .38;
+}
+
+.action-group.switch .action.active {
+  opacity: 1;
+}
+
+.action .material-icons, .action-group .material-icons {
   font-size: 16px;
+}
+
+.action-group .material-icons {
+  opacity: .7;
 }
 
 .action-delete {

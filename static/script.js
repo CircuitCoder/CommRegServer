@@ -99,8 +99,40 @@ function deepEq(a, b) {
   else return a === b;
 }
 
+const ResizeArea = {
+  props: ['disabled', 'value'],
+  template: `
+    <textarea
+      ref="area"
+      :value='value'
+      :disabled="disabled"
+      @input="$emit('input', $event.target.value)"></textarea>
+  `,
+
+  methods: {
+    resize() {
+      let target = this.$refs.area;
+      // Minimal height: 2 lines + border = 60px
+      target.style.height = '60px';
+      // Then set height to scrollHeight
+      target.style.height = target.scrollHeight + 'px';
+    },
+  },
+
+  mounted() {
+    this.resize();
+  },
+
+  watch: {
+    value() {
+      this.resize();
+    },
+  },
+}
+
 const desc = {
   el: '#app',
+  components: { 'resize-area': ResizeArea },
   data: {
     connected: false,
     connectionDown: false,
@@ -110,6 +142,7 @@ const desc = {
     locked: false,
     entries: [],
     referenceEntries: [],
+    engMode: [],
     fileStore: {},
     searchStr: '',
     // TODO: filtered changes when searchStr changes, or input loses focus
@@ -177,13 +210,6 @@ const desc = {
 
       if(this.limited !== null)
 	this.locked = this.entries.length === 0 || this.entries[0].disbandment !== null;
-
-      setTimeout(() => {
-        let areas = document.querySelectorAll('.row textarea');
-        areas.forEach(e => {
-          this.autoresize(e);
-        });
-      });
     },
 
     async syncUp() {
@@ -223,18 +249,17 @@ const desc = {
       console.log(this.fileStore);
     },
 
-    findMaxId() {
-      return this.entries.reduce((acc, e) => e.id > acc ? e.id : acc, 0);
-    },
-
-    add() {
-      let id = this.findMaxId() + 1;
+    async add() {
+      let resp = await sendWait({ cmd: 'len' });
+      let id = resp.len + 1;
       this.entries.push({
         id,
         name: '',
+        name_eng: '',
         category: '',
         tags: [],
         desc: '',
+        desc_eng: '',
         files: [],
         icon: null,
         creation: moment().format(DATE_FORMAT),
@@ -304,6 +329,10 @@ const desc = {
       this.activeTag = null;
     },
 
+    setEngMode(e, m) {
+      this.$set(this.engMode, e.id, m);
+    },
+
     discardDeletion() {
       this.pendingDeletion = null;
     },
@@ -324,13 +353,6 @@ const desc = {
 
     updateTagFilter(ev) {
       this.tagFilter = ev.target.value;
-    },
-
-    autoresize(target) {
-      // Minimal height: 2 lines + border = 60px
-      target.style.height = '60px';
-      // Then set height to scrollHeight
-      target.style.height = target.scrollHeight + 'px';
     },
 
     // Drag 'n Drop
@@ -399,6 +421,7 @@ const desc = {
         entry.icon = null;
 
       // Update desc
+      // TODO: update english version
       let segs = entry.desc.split('\n');
 
       for(let i = 0; i < segs.length; ++i) {
@@ -422,12 +445,6 @@ const desc = {
       }
 
       entry.desc = segs.filter(e => e !== null).join('\n');
-
-      const elIndex = this.entries.findIndex(e => e === entry);
-      const el = this.$refs.descs[elIndex];
-      setTimeout(() => {
-        this.autoresize(el);
-      });
     },
 
     setIcon(entry, file) {

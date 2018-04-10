@@ -39,7 +39,7 @@ impl Handler {
 
     fn list(&self) -> ws::Result<()> {
         let result = match self.limited {
-            None => self.store.read().unwrap().filter::<Split<&str>>(None, None),
+            None => self.store.read().unwrap().filter::<Split<&str>>(None, None, true),
             Some(id) => self.store.read().unwrap().fetch(id)
                 .map_or_else(Vec::new, |e| { let mut r = Vec::with_capacity(1); r.push(e); r }),
         };
@@ -262,6 +262,10 @@ impl ws::Handler for Handler {
         };
         if data["cmd"] == "list" {
             self.list()
+        } else if data["cmd"] == "len" {
+            let len = self.store.read().unwrap().len();
+            self.sender.send(format!("{{\"ok\":1,\"len\":{}}}", len))?;
+            Ok(())
         } else if data["cmd"] == "put" {
             // TODO: Can we remove this clone?
             self.put(data["payload"].clone())

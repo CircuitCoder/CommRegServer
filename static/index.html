@@ -33,7 +33,16 @@
               <div class="entry" v-for="entry of filteredEntries" :key="entry.id" :class="{ disbanded: entry.disbandment !== null }">
                 <div class="row title-row">
                   <i class="material-icons">title</i>
-                  <input placeholder="Name" v-model="entry.name" :disabled="locked"></input>
+                  <input
+                    placeholder="Name"
+                    v-if="!engMode[entry.id]"
+                    v-model="entry.name"
+                    :disabled="locked"></input>
+                  <input
+                    placeholder="English Name"
+                    v-if="engMode[entry.id]"
+                    v-model="entry.name_eng"
+                    :disabled="locked"></input>
                 </div>
                 <div class="row">
                   <i class="material-icons">inbox</i>
@@ -62,7 +71,18 @@
                 </div>
                 <div class="row multiline">
                   <i class="material-icons">description</i>
-                  <textarea placeholder="Description" v-model="entry.desc" ref="descs" @input="autoresize($event.target)" :disabled="locked"></textarea>
+                  <resize-area
+                    placeholder="Description"
+                    v-if="!engMode[entry.id]"
+                    v-model="entry.desc"
+                    key="desc-zh"
+                    :disabled="locked"></resize-area>
+                  <resize-area
+                    placeholder="English Description"
+                    v-if="engMode[entry.id]"
+                    v-model="entry.desc_eng"
+                    key="desc-en"
+                    :disabled="locked"></resize-area>
                 </div>
                 <div class="row multiline">
                   <i class="material-icons">attachment</i>
@@ -86,6 +106,11 @@
                   </div>
                 </div>
                 <div class="action-row" v-if="limited === null">
+                  <div class="action-group switch">
+                    <i class="material-icons">translate</i>
+                    <span class="action" :class="{ active: engMode[entry.id] }" @click="setEngMode(entry, true)">EN</span>
+                    <span class="action" :class="{ active: !engMode[entry.id] }" @click="setEngMode(entry, false)">ZH</span>
+                  </div>
                   <div class="action" @click="genKey(entry)">
                     <i class="material-icons">vpn_key</i>
                     <span>New Key</span>
