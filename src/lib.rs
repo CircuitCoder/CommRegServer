@@ -1,5 +1,6 @@
 // Re-export store & config
 #![feature(nll)]
+#![feature(catch_expr)]
 
 #[macro_use]
 extern crate serde_derive;
@@ -17,3 +18,4 @@ extern crate lazy_static;
 
 pub mod config;
 pub mod store;
+pub mod key;

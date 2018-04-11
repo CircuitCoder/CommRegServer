@@ -54,6 +54,14 @@ impl Entry {
     pub fn id(&self) -> i32 {
         self.id
     }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn name_eng(&self) -> &str {
+        &self.name_eng
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -455,7 +463,7 @@ impl Store {
 
         let stash = File::open(Path::new("./stash.json"))
             .map(|f| serde_json::from_reader(f).unwrap())
-            .unwrap_or_else(|e| HashMap::new());
+            .unwrap_or_else(|_| HashMap::new());
 
         let mut store = Store {
             db,

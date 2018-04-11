@@ -39,6 +39,7 @@ mod store;
 mod query;
 mod admin;
 mod config;
+mod key;
 
 use rocket::Rocket;
 use rocket::response::NamedFile;

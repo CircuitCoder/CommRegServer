@@ -109,8 +109,8 @@
                 <div class="action-row">
                   <div class="action-group switch">
                     <i class="material-icons">translate</i>
-                    <span class="action" :class="{ active: engMode[entry.id] }" @click="setEngMode(entry, true)">EN</span>
                     <span class="action" :class="{ active: !engMode[entry.id] }" @click="setEngMode(entry, false)">ZH</span>
+                    <span class="action" :class="{ active: engMode[entry.id] }" @click="setEngMode(entry, true)">EN</span>
                   </div>
                   <div class="action"
                     @click="genKey(entry)"

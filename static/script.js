@@ -234,6 +234,7 @@ const desc = {
       conn.addEventListener('message', initHandler);
 
       conn.onclose = () => {
+        if(!this.connected) return; // Wrong key
         this.connectionDown = true;
         setTimeout(() => {
           this.connect(); // Try reconnect immediately
