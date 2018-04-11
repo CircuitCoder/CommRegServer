@@ -7,6 +7,7 @@ use std::collections::*;
 use std::collections::hash_map::Entry::*;
 use std::error::Error;
 use std::fmt;
+use std::fs::File;
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 use jieba::Jieba;
@@ -451,9 +452,14 @@ impl Store {
         let mut dbopt = Options::new();
         dbopt.create_if_missing = true;
         let db = Database::open(Path::new("./db"), dbopt).unwrap();
+
+        let stash = File::open(Path::new("./stash.json"))
+            .map(|f| serde_json::from_reader(f).unwrap())
+            .unwrap_or_else(|e| HashMap::new());
+
         let mut store = Store {
             db,
-            stash: HashMap::new(),
+            stash,
             internal: InternalStore {
                 entries: HashMap::new(),
                 index: HashMap::new(),
@@ -474,7 +480,8 @@ impl Store {
 
     pub fn close(&mut self) {
         println!("Syncing storage...");
-        // TODO: Saving stash
+        let stash = File::create(Path::new("./stash.json")).unwrap();
+        serde_json::to_writer(stash, &self.stash).unwrap();
         // TODO: try to drop self.db
     }
 
@@ -490,7 +497,7 @@ impl Store {
                 Some(e) => PullEntry::Stashed(e.clone()),
             }
         }).collect();
-        result.sort_unstable_by_key(|a| { -a.id() });
+        result.sort_unstable_by_key(|a| { a.id() });
         result
     }
 
@@ -516,7 +523,6 @@ impl Store {
             entry.hidden = true;
             self.put(entry)
         } else if self.internal.cmp_entry(&entry) {
-            println!("SAME!");
             self.discard(entry.id);
             Ok(())
         } else {

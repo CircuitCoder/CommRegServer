@@ -9,12 +9,13 @@ use csv::Reader;
 fn main() {
     let mut store = store::Store::new();
     let mut rdr = Reader::from_reader(io::stdin());
-    let mut curid = store.highest_id();
+    let mut curid = store.len();
     for result in rdr.deserialize() {
         let raw: store::RawEntry = result.unwrap();
         curid += 1;
         let entry: store::Entry = raw.extend(curid);
         println!("Inserting: {:?}", entry);
-        store.put(entry, false).unwrap();
+        store.stash(entry, false).unwrap();
+        store.commit(curid).unwrap();
     }
 }

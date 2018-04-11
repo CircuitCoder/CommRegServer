@@ -18,7 +18,7 @@ moment.updateLocale('en', {
   relativeTime: {
     future: "-%s",
     past:   "%s",
-    s  : 'now',
+    s  : '%ds',
     ss : '%ds',
     m:  "1m",
     mm: "%dmin",
@@ -58,9 +58,15 @@ function buildWsURI(key) {
 
 function sendWait(data, raw = false) {
   return new Promise((resolve, reject) => {
-    conn.onmessage = msg => {
-      resolve(JSON.parse(msg.data))
+    let callback = msg => {
+      let payload = JSON.parse(msg.data);
+      if(payload.cmd !== 'update') {
+        conn.removeEventListener('message', callback);
+        resolve(payload);
+      }
     };
+    conn.addEventListener('message', callback);
+
     const compiled = raw ? data : JSON.stringify(data);
     conn.send(compiled);
   });
@@ -191,38 +197,63 @@ const desc = {
   methods: {
     connect() {
       conn = new WebSocket(buildWsURI(this.authKey));
-      conn.onmessage = (msg) => {
+      let initHandler = async msg => {
+        conn.removeEventListener('message', initHandler);
         try {
           const data = JSON.parse(msg.data);
           if(data.ok) {
-	    if('limited' in data) this.limited = data.limited;
+            if('limited' in data) this.limited = data.limited;
 
             this.connectionDown = false;
             if(!this.connected)
               this.init();
-            // TODO: regular refresh
-            return true;
+            else
+              this.syncDown();
+
+            conn.addEventListener('message', msg => {
+              let payload = JSON.parse(msg.data);
+              if(payload.cmd === 'update') {
+                // Is update
+                console.log('update', payload.payload);
+
+                let index = this.referenceEntries.findIndex(e => e.id === payload.id);
+                if(index === -1) { // New entry
+                  this.entries.shift(deepClone(payload.payload));
+                  this.referenceEntries.shift(payload.payload);
+                } else {
+                  let ni = this.entries.findIndex(e => e.id === payload.id);
+                  this.$set(this.entries, ni, deepClone(payload.payload));
+                  this.$set(this.referenceEntries, index, payload.payload);
+                }
+              }
+            });
           }
         } catch(e) { console.error(e); }
         this.wrongKey = true;
       }
+
+      conn.addEventListener('message', initHandler);
+
       conn.onclose = () => {
         this.connectionDown = true;
-	setTimeout(() => {
-	  this.connect(); // Try reconnect immediately
-	}, 1000);
+        setTimeout(() => {
+          this.connect(); // Try reconnect immediately
+        }, 1000);
       };
     },
 
     async init() {
       this.connected = true;
       await this.syncDown();
-      this.filteredEntries = [...this.entries]; // Show all
     },
 
     async syncDown() {
-      this.entries = await sendWait({ cmd: 'list' });
-      this.referenceEntries = deepClone(this.entries);
+      // Since the rendering may takes a really long time,
+      // It's possible to trigger the update process before the reference is cloned
+      this.referenceEntries = await sendWait({ cmd: 'list' });
+      this.entries = deepClone(this.referenceEntries);
+      console.log(this.referenceEntries);
+      console.log(this.entries);
 
       if(this.limited !== null)
         this.locked =
@@ -236,6 +267,7 @@ const desc = {
       let curPtr = 0;
       for(let e of snapshot) {
         while(curPtr < this.referenceEntries.length && this.referenceEntries[curPtr].id < e.id) {
+
           // Delete
           await sendWait({ cmd: 'del', target: this.referenceEntries[curPtr].id });
           ++curPtr;
@@ -243,11 +275,21 @@ const desc = {
 
         if(curPtr >= this.referenceEntries.length || this.referenceEntries[curPtr].id > e.id) {
           // New
-          const data = await sendWait({ cmd: 'put', payload: e });
+          await sendWait({ cmd: 'put', payload: e });
         } else {
           if(!deepEq(e, this.referenceEntries[curPtr])) {
             // Update
-            await sendWait({ cmd: 'put', payload: e });
+            const resp = await sendWait({ cmd: 'put', payload: e });
+            const data = resp.payload;
+            const target = this.entries.find(i => i.id === e.id)
+            console.log(target);
+            if(target) {
+              target.type = data.type;
+              target.timestamp = data.timestamp;
+            }
+
+            e.type = data.type;
+            e.timestamp = data.timestamp;
           }
           ++curPtr;
         }
@@ -532,12 +574,10 @@ const desc = {
 
     async commit(id) {
       await sendWait({ cmd: 'commit', id });
-      await this.syncDown();
     },
 
     async discard(id) {
       await sendWait({ cmd: 'discard', id });
-      await this.syncDown();
     },
 
     formatTimeDiff(ts) {
@@ -585,7 +625,7 @@ const desc = {
     },
 
     filteredEntries() {
-      let result = this.entries;
+      let result = this.entries.slice(); // Shallow clone
       const segs = this.searchStr.split(' ');
       for(const seg of segs) {
         if(seg === "") continue;
@@ -603,7 +643,7 @@ const desc = {
           );
         }
       }
-      return result;
+      return result.reverse(); // Larger id on top
     },
 
     files() {

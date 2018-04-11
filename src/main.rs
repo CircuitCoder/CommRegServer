@@ -9,6 +9,7 @@
 #![feature(catch_expr)]
 
 #![allow(print_literal)]
+#![allow(needless_pass_by_value)]
 
 extern crate ws;
 extern crate rocket;

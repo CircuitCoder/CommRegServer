@@ -3,6 +3,7 @@
 **/*.rs.bk
 
 db/
+stash.json
 static/store/*
 !static/store/.gitkeep
 

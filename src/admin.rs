@@ -8,6 +8,7 @@ use serde::Serializer;
 use serde_json::Value;
 use serde_json;
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::fs::*;
 use std::io::Write;
 use std::path::Path;
@@ -15,8 +16,13 @@ use std::sync::*;
 use std;
 use store::{Store, Entry, PullEntry};
 use uuid::Uuid;
-use ws::{Sender, Handshake, Message, Frame};
+use ws::{Sender, Handshake, Message, Frame, CloseCode};
 use ws;
+use ws::util::Token;
+
+lazy_static! {
+    static ref SENDERS: RwLock<HashMap<Token, Sender>> = RwLock::new(HashMap::new());
+}
 
 fn err_to_wserr<T, I: Into<Cow<'static, str>>>(e: T, reason: I) -> ws::Error
   where T: 'static + std::error::Error + Send + Sync {
@@ -68,11 +74,36 @@ impl Handler {
             return Ok(())
         }
 
-        if let Err(e) = self.store.write().unwrap().stash(payload, self.limited.is_some()) {
+        let mut s = self.store.write().unwrap();
+        let id = payload.id();
+
+        if let Err(e) = s.stash(payload, self.limited.is_some()) {
             Err(err_to_wserr(e, "Storage failure"))
         } else {
-            self.sender.send("{\"ok\":1}")?;
-            Ok(())
+            let payload = match serde_json::to_value(s.pull_fetch(id)) {
+                Err(e) => return Err(err_to_wserr(e, "Serialization Failed")),
+                Ok(p) => p,
+            };
+
+            std::mem::drop(s);
+            let content = json!({
+                "cmd": "update",
+                "id": id,
+                "payload": payload,
+            }).to_string();
+
+            let pong = json!({
+                "ok": 1,
+                "payload": payload,
+            }).to_string();
+
+            for (k, v) in SENDERS.read().unwrap().iter() {
+                if k != &self.sender.token() {
+                    v.send(content.clone())?;
+                }
+            }
+
+            self.sender.send(pong)
         }
     }
 
@@ -91,6 +122,7 @@ impl Handler {
             }
         }
         self.sender.send("{\"ok\":0}")?;
+        // TODO: syncdown for del
         Ok(())
     }
 
@@ -240,7 +272,20 @@ impl Handler {
 }
 
 impl ws::Handler for Handler {
+    fn on_close(&mut self, code: CloseCode, reason: &str) {
+        // Closed
+        SENDERS
+            .write()
+            .unwrap()
+            .remove(&self.sender.token());
+    }
+
     fn on_open(&mut self, shake: Handshake) -> ws::Result<()> {
+        SENDERS
+            .write()
+            .unwrap()
+            .insert(self.sender.token(), self.sender.clone());
+
         let res = shake.request.resource();
         if res == format!("/{}", self.config.secret) {
             // Is administrative account
@@ -265,7 +310,7 @@ impl ws::Handler for Handler {
         };
         if data["cmd"] == "list" {
             self.list()
-        } else if data["cmd"] == "commit" {
+        } else if data["cmd"] == "commit" || data["cmd"] == "discard" {
             if self.limited.is_some() {
                 self.sender.send("{\"ok\":0}")?; // Denied
                 return Ok(())
@@ -285,31 +330,27 @@ impl ws::Handler for Handler {
                 },
             };
 
-            if let Err(e) = self.store.write().unwrap().commit(id) {
-                return Err(err_to_wserr(e, "Storage failure"))
-            }
-            self.sender.send("{\"ok\":1}")
-        } else if data["cmd"] == "discard" {
-            if self.limited.is_some() {
-                self.sender.send("{\"ok\":0}")?; // Denied
-                return Ok(())
-            }
-            
-            let id = match data["id"] {
-                Value::Number(ref i) => match i.as_i64() {
-                    Some(i) => i as i32,
-                    None => {
-                        self.sender.send("{\"ok\":0}")?;
-                        return Ok(());
-                    }
-                },
-                _ => {
-                    self.sender.send("{\"ok\":0}")?;
-                    return Ok(());
-                },
+            let mut s = self.store.write().unwrap();
+            if data["cmd"] == "commit" {
+                if let Err(e) = s.commit(id) {
+                    return Err(err_to_wserr(e, "Storage failure"))
+                }
+            } else {
+                s.discard(id);
             };
 
-            self.store.write().unwrap().discard(id);
+            let payload = match serde_json::to_value(s.pull_fetch(id)) {
+                Err(e) => return Err(err_to_wserr(e, "Serialization Failed")),
+                Ok(p) => p,
+            };
+
+            let content = json!({
+                "cmd": "update",
+                "id": id,
+                "payload": payload,
+            }).to_string();
+
+            self.sender.broadcast(content);
             self.sender.send("{\"ok\":1}")
         } else if data["cmd"] == "len" {
             let len = self.store.read().unwrap().len();
