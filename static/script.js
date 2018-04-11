@@ -214,7 +214,6 @@ const desc = {
               let payload = JSON.parse(msg.data);
               if(payload.cmd === 'update') {
                 // Is update
-                console.log('update', payload.payload);
 
                 let index = this.referenceEntries.findIndex(e => e.id === payload.id);
                 if(index === -1) { // New entry
@@ -252,8 +251,6 @@ const desc = {
       // It's possible to trigger the update process before the reference is cloned
       this.referenceEntries = await sendWait({ cmd: 'list' });
       this.entries = deepClone(this.referenceEntries);
-      console.log(this.referenceEntries);
-      console.log(this.entries);
 
       if(this.limited !== null)
         this.locked =
@@ -282,7 +279,7 @@ const desc = {
             const resp = await sendWait({ cmd: 'put', payload: e });
             const data = resp.payload;
             const target = this.entries.find(i => i.id === e.id)
-            console.log(target);
+
             if(target) {
               target.type = data.type;
               target.timestamp = data.timestamp;
@@ -306,7 +303,6 @@ const desc = {
 
     async listFiles(id) {
       Vue.set(this.fileStore, id, await sendWait({ cmd: 'files', entry: id }));
-      console.log(this.fileStore);
     },
 
     async add() {
@@ -581,7 +577,6 @@ const desc = {
     },
 
     formatTimeDiff(ts) {
-      console.log('called');
       if(this.currentTime !== null)
         return moment(ts).from(this.currentTime);
       else return moment(ts).fromNow();
@@ -629,7 +624,7 @@ const desc = {
       const segs = this.searchStr.split(' ');
       for(const seg of segs) {
         if(seg === "") continue;
-        if(seg === '@review') { // Match pending
+        if(seg === '@pending') { // Match pending
           result = result.filter(e => e.type === 'Stashed');
         } else if(seg.match(/#\d+/)) { // Is id filter
           const filter = parseInt(seg.substr(1), 10);
@@ -653,7 +648,6 @@ const desc = {
         Vue.set(this.fileStore, id, []);
         this.listFiles(id);
       }
-      console.log(this.fileStore);
       return this.fileStore[id];
     },
   },

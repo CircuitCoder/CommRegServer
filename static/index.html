@@ -18,7 +18,7 @@
   <div class="container">
     <div id="app">
       <div class="connection-form">
-        <input v-model="authKey" @keydown.enter="connect" placeholder="Login Key" :class="{ error: wrongKey }">
+        <input v-model="authKey" @keydown.enter="connect" placeholder="Login Key" :class="{ error: wrongKey }" type="password">
       </div>
       <transition name="fade">
         <div class="content" v-if="connected"
@@ -174,7 +174,7 @@
             <div class="inner">
               <i class="material-icons icon-btn" @click="add" v-if="limited === null">add</i>
               <span class="limited-id" v-if="limited !== null">#{{limited}}</span>
-              <input class="bottom-search" placeholder="Search for category/tags/part of name, #id or @review" v-model="searchStr" v-if="limited === null">
+              <input class="bottom-search" placeholder="Search for category/tags/part of name, #id or @pending" v-model="searchStr" v-if="limited === null">
               <transition name="fast-fade" mode="out-in" v-if="!locked">
                 <i class="material-icons syncing-ind syncing" v-if="updateDebouncer !== null" key="syncing">sync</i>
                 <i class="material-icons syncing-ind synced" v-if="updateDebouncer === null" key="synced">done</i>

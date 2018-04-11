@@ -214,6 +214,7 @@ textarea::placeholder {
 .action-row {
   line-height: 16px;
   padding-left: 34px;
+  height: 16px;
 }
 
 .action {
