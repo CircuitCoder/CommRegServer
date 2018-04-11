@@ -13,6 +13,26 @@ let CONFIG;
 
 let conn;
 
+// Setup moment
+moment.updateLocale('en', {
+  relativeTime: {
+    future: "-%s",
+    past:   "%s",
+    s  : 'now',
+    ss : '%ds',
+    m:  "1m",
+    mm: "%dmin",
+    h:  "1h",
+    hh: "%dh",
+    d:  "1D",
+    dd: "%dD",
+    M:  "1M",
+    MM: "%dM",
+    y:  "aY",
+    yy: "%dY"
+  }
+});
+
 function buildWsURI(key) {
   let host = CONFIG.ws.host;
   let port = ':' + CONFIG.ws.port;
@@ -145,6 +165,7 @@ const desc = {
     engMode: [],
     fileStore: {},
     searchStr: '',
+    currentTime: null,
     // TODO: filtered changes when searchStr changes, or input loses focus
 
     updateDebouncer: null,
@@ -200,16 +221,13 @@ const desc = {
     },
 
     async syncDown() {
-      const data = await sendWait({ cmd: 'list' });
-      this.entries = data.sort((a,b) => {
-        if(a.id < b.id) return -1;
-        if(a.id > b.id) return 1;
-        return 0;
-      });
+      this.entries = await sendWait({ cmd: 'list' });
       this.referenceEntries = deepClone(this.entries);
 
       if(this.limited !== null)
-	this.locked = this.entries.length === 0 || this.entries[0].disbandment !== null;
+        this.locked =
+          this.entries.length === 0
+          || this.entries[0].disbandment !== null;
     },
 
     async syncUp() {
@@ -511,6 +529,23 @@ const desc = {
       await sendWait({ cmd: 'deleteFile', target: file });
       await this.listFiles(id);
     },
+
+    async commit(id) {
+      await sendWait({ cmd: 'commit', id });
+      await this.syncDown();
+    },
+
+    async discard(id) {
+      await sendWait({ cmd: 'discard', id });
+      await this.syncDown();
+    },
+
+    formatTimeDiff(ts) {
+      console.log('called');
+      if(this.currentTime !== null)
+        return moment(ts).from(this.currentTime);
+      else return moment(ts).fromNow();
+    },
   },
 
   computed: {
@@ -554,7 +589,9 @@ const desc = {
       const segs = this.searchStr.split(' ');
       for(const seg of segs) {
         if(seg === "") continue;
-        if(seg.match(/#\d+/)) { // Is id filter
+        if(seg === '@review') { // Match pending
+          result = result.filter(e => e.type === 'Stashed');
+        } else if(seg.match(/#\d+/)) { // Is id filter
           const filter = parseInt(seg.substr(1), 10);
           result = result.filter(e => e.id === filter);
         } else {
@@ -614,4 +651,9 @@ async function setup() {
 
   // Bootstrap app
   const app = new Vue(desc);
+
+  // Update timestamp
+  setInterval(() => {
+    app.currentTime = Date.now();
+  }, 1000);
 }

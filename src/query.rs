@@ -25,12 +25,12 @@ impl<'a> FromParam<'a> for Availability {
 fn list(store: State<&RwLock<Store>>, avail: Availability, search: &RawStr) -> Result<Json<Vec<Entry>>, Utf8Error> {
     Ok(Json(store.read()
         .unwrap()
-        .filter(Some(avail), Some(search.url_decode()?.split(' ')), false)))
+        .filter(Some(avail), Some(search.url_decode()?.split(' ')))))
 }
 
 #[get("/<avail>", rank=2)]
 fn list_all(store: State<&RwLock<Store>>, avail: Availability) -> Json<Vec<Entry>> {
-    Json(store.read().unwrap().filter::<Split<&str>>(Some(avail), None, false))
+    Json(store.read().unwrap().filter::<Split<&str>>(Some(avail), None))
 }
 
 #[get("/fetch/<id>")]

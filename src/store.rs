@@ -8,10 +8,15 @@ use std::collections::hash_map::Entry::*;
 use std::error::Error;
 use std::fmt;
 use std::path::Path;
+use std::time::{SystemTime, UNIX_EPOCH};
 use jieba::Jieba;
 
 fn get_false() -> bool {
     false
+}
+
+fn is_false(b: &bool) -> bool {
+    return !b;
 }
 
 lazy_static! {
@@ -23,7 +28,7 @@ pub enum Availability {
     Disbanded,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct Entry {
     id: i32, // Integer ID
     name: String, // Name
@@ -37,8 +42,11 @@ pub struct Entry {
     creation: String, // YYYY-MM-DD
     disbandment: Option<String>, // YYYY-MM-DD
 
-    #[serde(default = "get_false")]
+    #[serde(default = "get_false", skip_serializing_if="is_false")]
     deleted: bool,
+
+    #[serde(default = "get_false", skip_serializing_if="is_false")]
+    hidden: bool,
 }
 
 impl Entry {
@@ -81,6 +89,48 @@ impl RawEntry {
             creation: self.creation,
             disbandment: self.disbandment,
             deleted: false,
+            hidden: false,
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct StashedEntry {
+    #[serde(flatten)]
+    entry: Entry,
+    timestamp: u64,
+}
+
+impl StashedEntry {
+    fn create(entry: Entry) -> Self {
+        let t = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+        StashedEntry{
+            entry: entry,
+            timestamp: t.as_secs() * 1000 + t.subsec_nanos() as u64 / 1_000_000
+        }
+    }
+
+    fn content(&self) -> &Entry {
+        &self.entry
+    }
+
+    fn get(self) -> Entry {
+        self.entry
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(tag = "type")]
+pub enum PullEntry {
+    Stashed(StashedEntry),
+    Unmodified(Entry),
+}
+
+impl PullEntry {
+    fn id(&self) -> i32 {
+        match self {
+            &PullEntry::Stashed(ref e) => e.content().id,
+            &PullEntry::Unmodified(ref e) => e.id,
         }
     }
 }
@@ -91,6 +141,7 @@ pub enum StoreError {
     Denied,
     InvalidString,
     DeletedEntry,
+    SystemError,
 }
 
 impl fmt::Display for StoreError {
@@ -106,6 +157,7 @@ impl Error for StoreError {
             StoreError::Denied => "Operation denied",
             StoreError::InvalidString => "Invalid String: contains NUL",
             StoreError::DeletedEntry => "Deleted entries cannot be modified",
+            StoreError::SystemError => "Cannot invoke system API",
         }
     }
 }
@@ -227,18 +279,10 @@ impl InternalStore {
         self.entries.insert(entry.id, entry);
     }
 
-    fn mem_put(&mut self, mut entry: Entry, restricted: bool) -> Result<(i32, Vec<u8>), StoreError> {
+    fn mem_put(&mut self, mut entry: Entry) -> Result<(i32, Vec<u8>), StoreError> {
         // TODO: recover from failure
 
         let original = self.entries.get(&entry.id);
-
-        if restricted {
-            match original {
-                None => return Err(StoreError::Denied),
-                Some(e) if e.disbandment.is_some() => return Err(StoreError::Denied),
-                _ => {}, // No-op
-            }
-        }
 
         if original.is_none() {
             let result = serde_json::to_vec(&entry).unwrap();
@@ -333,17 +377,17 @@ impl InternalStore {
     fn filter<'a, T: Iterator<Item=&'a str>>(
         &self,
         avail: Option<Availability>,
-        keywords: Option<T>,
-        sort_by_id: bool) -> Vec<Entry> {
+        keywords: Option<T>) -> Vec<Entry> {
         // TODO: Impl
         let mut hash: HashMap<i32,i64> = HashMap::new();
         let words = if let Some(iter) = keywords {
             iter.filter_map(|k| {
-                let s = k.clone();
-                JIEBA.cut_for_search(&s).ok()
+                JIEBA.cut_for_search(k).ok()
             })
         } else {
-            let source = self.entries.values().filter(|e| !e.deleted);
+            let source = self.entries
+                .values()
+                .filter(|e| !e.deleted && !e.hidden);
             let mut result: Vec<Entry> = match avail {
                 None => source.cloned().collect(),
                 Some(Availability::Available) =>
@@ -352,11 +396,7 @@ impl InternalStore {
                     source.filter(|e| e.disbandment.is_some()).cloned().collect(),
             };
 
-            if sort_by_id {
-                result.sort_unstable_by_key(|a| { a.id });
-            } else {
-                result.sort_unstable_by(|a, b| { a.name.cmp(&b.name) });
-            }
+            result.sort_unstable_by(|a, b| { a.name.cmp(&b.name) });
 
             return result;
         };
@@ -373,11 +413,7 @@ impl InternalStore {
 
         let mut ids: Vec<i32> = hash.keys().cloned().collect();
 
-        if sort_by_id {
-            ids.sort_unstable_by_key(|i| { (-hash[i], i.clone()) });
-        } else {
-            ids.sort_unstable_by_key(|i| { (-hash[i], &self.entries[i].name) });
-        }
+        ids.sort_unstable_by_key(|i| { (-hash[i], &self.entries[i].name) });
 
         let it = ids.iter().map(|i| &self.entries[i]);
         if let Some(a) = avail {
@@ -392,6 +428,13 @@ impl InternalStore {
         self.entries.get(&id).cloned()
     }
 
+    fn cmp_entry(&self, entry: &Entry) -> bool {
+        match self.entries.get(&entry.id) {
+            Some(e) => e == entry,
+            None => false,
+        }
+    }
+
     fn highest_id(&self) -> i32 {
         self.entries.keys().max().cloned().unwrap_or(0)
     }
@@ -399,6 +442,7 @@ impl InternalStore {
 
 pub struct Store {
     db: Database<i32>,
+    stash: HashMap<i32, StashedEntry>,
     internal: InternalStore,
 }
 
@@ -409,6 +453,7 @@ impl Store {
         let db = Database::open(Path::new("./db"), dbopt).unwrap();
         let mut store = Store {
             db,
+            stash: HashMap::new(),
             internal: InternalStore {
                 entries: HashMap::new(),
                 index: HashMap::new(),
@@ -421,7 +466,7 @@ impl Store {
             if entry.deleted {
                 store.internal.mem_load(entry);
             } else {
-                store.internal.mem_put(entry, false).unwrap();
+                store.internal.mem_put(entry).unwrap();
             }
         }
         store
@@ -429,6 +474,7 @@ impl Store {
 
     pub fn close(&mut self) {
         println!("Syncing storage...");
+        // TODO: Saving stash
         // TODO: try to drop self.db
     }
 
@@ -436,8 +482,68 @@ impl Store {
         self.internal.len()
     }
 
-    pub fn put(&mut self, entry: Entry, restricted: bool) -> Result<(), StoreError> {
-        let (id, content) = self.internal.mem_put(entry, restricted)?;
+    pub fn pull(&self) -> Vec<PullEntry> {
+        let all = self.internal.entries.values().filter(|v| { !v.deleted });
+        let mut result: Vec<PullEntry> = all.map(|v| {
+            match self.stash.get(&v.id) {
+                None => PullEntry::Unmodified(v.clone()),
+                Some(e) => PullEntry::Stashed(e.clone()),
+            }
+        }).collect();
+        result.sort_unstable_by_key(|a| { -a.id() });
+        result
+    }
+
+    pub fn pull_fetch(&self, id: i32) -> Option<PullEntry> {
+        self.stash
+            .get(&id)
+            .cloned()
+            .map(PullEntry::Stashed)
+            .or_else(|| { self.fetch(id).map(PullEntry::Unmodified) })
+    }
+
+    pub fn stash(&mut self, mut entry: Entry, restricted: bool) -> Result<(), StoreError> {
+        if entry.id > self.internal.len() {
+            // Is a new entry
+
+            if restricted {
+                return Err(StoreError::Denied);
+            }
+
+            let id = entry.id;
+            self.stash.insert(id, StashedEntry::create(entry.clone()));
+
+            entry.hidden = true;
+            self.put(entry)
+        } else if self.internal.cmp_entry(&entry) {
+            println!("SAME!");
+            self.discard(entry.id);
+            Ok(())
+        } else {
+            let id = entry.id;
+            self.stash.insert(id, StashedEntry::create(entry));
+            Ok(())
+        }
+    }
+
+    pub fn commit(&mut self, id: i32) -> Result<(), StoreError> {
+        match self.stash.entry(id) {
+            Vacant(_) => Ok(()),
+            Occupied(m) => {
+                let (_, v) = m.remove_entry();
+                self.put(v.get())
+            }
+        }
+    }
+
+    pub fn discard(&mut self, id: i32) {
+        if let Occupied(m) = self.stash.entry(id) {
+            m.remove_entry();
+        }
+    }
+
+    fn put(&mut self, entry: Entry) -> Result<(), StoreError> {
+        let (id, content) = self.internal.mem_put(entry)?;
         self.db.put(WriteOptions::new(), id, &content).unwrap();
         Ok(())
     }
@@ -445,15 +551,15 @@ impl Store {
     pub fn del(&mut self, id: i32) -> Result<(), StoreError> {
         let entry = self.internal.mem_del(id)?;
         self.db.put(WriteOptions::new(), id, &entry).unwrap();
+        self.stash.remove(&id);
         Ok(())
     }
 
     pub fn filter<'a, T: Iterator<Item=&'a str>>(
         &self,
         avail: Option<Availability>,
-        keywords: Option<T>,
-        sort_by_id: bool) -> Vec<Entry> {
-        self.internal.filter(avail, keywords, sort_by_id)
+        keywords: Option<T>) -> Vec<Entry> {
+        self.internal.filter(avail, keywords)
     }
 
     pub fn fetch(&self, id: i32) -> Option<Entry> {

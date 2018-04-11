@@ -4,7 +4,6 @@
 #![allow(dead_code)]
 
 use std::path::{Path, PathBuf};
-use std::os::raw::c_char;
 use std::ffi::{CString};
 // TODO: windows compatiiblity
 use std::os::unix::ffi::OsStrExt;

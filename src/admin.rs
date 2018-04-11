@@ -11,10 +11,9 @@ use std::borrow::Cow;
 use std::fs::*;
 use std::io::Write;
 use std::path::Path;
-use std::str::Split;
 use std::sync::*;
 use std;
-use store::{Store, Entry};
+use store::{Store, Entry, PullEntry};
 use uuid::Uuid;
 use ws::{Sender, Handshake, Message, Frame};
 use ws;
@@ -39,9 +38,13 @@ impl Handler {
 
     fn list(&self) -> ws::Result<()> {
         let result = match self.limited {
-            None => self.store.read().unwrap().filter::<Split<&str>>(None, None, true),
-            Some(id) => self.store.read().unwrap().fetch(id)
-                .map_or_else(Vec::new, |e| { let mut r = Vec::with_capacity(1); r.push(e); r }),
+            None => self.store.read().unwrap().pull(),
+            Some(id) => self.store.read().unwrap().pull_fetch(id)
+                .map_or_else(Vec::new, |e| {
+                    let mut r = Vec::with_capacity(1);
+                    r.push(e);
+                    r
+                }),
         };
         let s = match serde_json::to_string(&result) {
             Err(e) => return Err(err_to_wserr(e, "Serialization failed")),
@@ -65,7 +68,7 @@ impl Handler {
             return Ok(())
         }
 
-        if let Err(e) = self.store.write().unwrap().put(payload, self.limited.is_some()) {
+        if let Err(e) = self.store.write().unwrap().stash(payload, self.limited.is_some()) {
             Err(err_to_wserr(e, "Storage failure"))
         } else {
             self.sender.send("{\"ok\":1}")?;
@@ -262,6 +265,52 @@ impl ws::Handler for Handler {
         };
         if data["cmd"] == "list" {
             self.list()
+        } else if data["cmd"] == "commit" {
+            if self.limited.is_some() {
+                self.sender.send("{\"ok\":0}")?; // Denied
+                return Ok(())
+            }
+
+            let id = match data["id"] {
+                Value::Number(ref i) => match i.as_i64() {
+                    Some(i) => i as i32,
+                    None => {
+                        self.sender.send("{\"ok\":0}")?;
+                        return Ok(());
+                    }
+                },
+                _ => {
+                    self.sender.send("{\"ok\":0}")?;
+                    return Ok(());
+                },
+            };
+
+            if let Err(e) = self.store.write().unwrap().commit(id) {
+                return Err(err_to_wserr(e, "Storage failure"))
+            }
+            self.sender.send("{\"ok\":1}")
+        } else if data["cmd"] == "discard" {
+            if self.limited.is_some() {
+                self.sender.send("{\"ok\":0}")?; // Denied
+                return Ok(())
+            }
+            
+            let id = match data["id"] {
+                Value::Number(ref i) => match i.as_i64() {
+                    Some(i) => i as i32,
+                    None => {
+                        self.sender.send("{\"ok\":0}")?;
+                        return Ok(());
+                    }
+                },
+                _ => {
+                    self.sender.send("{\"ok\":0}")?;
+                    return Ok(());
+                },
+            };
+
+            self.store.write().unwrap().discard(id);
+            self.sender.send("{\"ok\":1}")
         } else if data["cmd"] == "len" {
             let len = self.store.read().unwrap().len();
             self.sender.send(format!("{{\"ok\":1,\"len\":{}}}", len))?;

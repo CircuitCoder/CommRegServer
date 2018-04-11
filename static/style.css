@@ -259,7 +259,7 @@ textarea::placeholder {
   font-size: 16px;
 }
 
-.action-group .material-icons {
+.action-group > .material-icons {
   opacity: .7;
 }
 
@@ -280,6 +280,26 @@ textarea::placeholder {
   position: absolute;
   left: 18px;
   top: 0;
+}
+
+.review {
+  font-size: 12px;
+  line-height: 16px;
+  display: inline-flex;
+  align-items: center;
+  color: black;
+  opacity: .7;
+  float: right;
+}
+
+.review .material-icons {
+  margin-right: 5px;
+  font-size: 16px;
+}
+
+.review-actions {
+  float: right;
+  margin-right: 10px;
 }
 
 .id {

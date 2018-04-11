@@ -1,13 +1,14 @@
 #![feature(plugin)]
 #![plugin(rocket_codegen)]
-// #![cfg_attr(feature="clippy", plugin(clippy))]
-// Now clippy causes ICE
+#![cfg_attr(feature="clippy", plugin(clippy))]
 
 #![feature(integer_atomics)]
 #![feature(option_filter)]
 #![feature(nll)]
 #![feature(conservative_impl_trait)]
 #![feature(catch_expr)]
+
+#![allow(print_literal)]
 
 extern crate ws;
 extern crate rocket;
