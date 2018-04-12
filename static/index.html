@@ -18,7 +18,7 @@
   <div class="container">
     <div id="app">
       <div class="connection-form">
-        <input v-model="authKey" @keydown.enter="connect" placeholder="Login Key" :class="{ error: wrongKey }">
+        <input v-model="authKey" @keydown.enter="connect" placeholder="Login Key" :class="{ error: wrongKey }" type="password">
       </div>
       <transition name="fade">
         <div class="content" v-if="connected"
@@ -30,10 +30,20 @@
           ref="content">
           <div class="entries" :class="{ locked: locked }">
             <div class="inner">
-              <div class="entry" v-for="entry of filteredEntries" :key="entry.id" :class="{ disbanded: entry.disbandment !== null }">
+              <div class="entry" v-for="entry of filteredEntries" :key="entry.id"
+                :class="{ disbanded: entry.disbandment !== null }">
                 <div class="row title-row">
                   <i class="material-icons">title</i>
-                  <input placeholder="Name" v-model="entry.name" :disabled="locked"></input>
+                  <input
+                    placeholder="Name"
+                    v-if="!engMode[entry.id]"
+                    v-model="entry.name"
+                    :disabled="locked"></input>
+                  <input
+                    placeholder="English Name"
+                    v-if="engMode[entry.id]"
+                    v-model="entry.name_eng"
+                    :disabled="locked"></input>
                 </div>
                 <div class="row">
                   <i class="material-icons">inbox</i>
@@ -50,7 +60,7 @@
                     @focus="inputTag(entry, $event)"
                     @input="updateTagFilter($event)"
                     @blur="discardTag(entry, $event)"
-            :disabled="locked">
+                    :disabled="locked">
                 </div>
                 <div class="row">
                   <i class="material-icons">flight_takeoff</i>
@@ -62,7 +72,18 @@
                 </div>
                 <div class="row multiline">
                   <i class="material-icons">description</i>
-                  <textarea placeholder="Description" v-model="entry.desc" ref="descs" @input="autoresize($event.target)" :disabled="locked"></textarea>
+                  <resize-area
+                    placeholder="Description"
+                    v-if="!engMode[entry.id]"
+                    v-model="entry.desc"
+                    key="desc-zh"
+                    :disabled="locked"></resize-area>
+                  <resize-area
+                    placeholder="English Description"
+                    v-if="engMode[entry.id]"
+                    v-model="entry.desc_eng"
+                    key="desc-en"
+                    :disabled="locked"></resize-area>
                 </div>
                 <div class="row multiline">
                   <i class="material-icons">attachment</i>
@@ -85,27 +106,53 @@
                     </div>
                   </div>
                 </div>
-                <div class="action-row" v-if="limited === null">
-                  <div class="action" @click="genKey(entry)">
+                <div class="action-row">
+                  <div class="action-group switch">
+                    <i class="material-icons">translate</i>
+                    <span class="action" :class="{ active: !engMode[entry.id] }" @click="setEngMode(entry, false)">ZH</span>
+                    <span class="action" :class="{ active: engMode[entry.id] }" @click="setEngMode(entry, true)">EN</span>
+                  </div>
+                  <div class="action"
+                    @click="genKey(entry)"
+                    v-if="limited === null">
                     <i class="material-icons">vpn_key</i>
                     <span>New Key</span>
                   </div>
-                  <div class="action" @click="disband(entry)" v-if="entry.disbandment === null">
+                  <div class="action"
+                    @click="disband(entry)"
+                    v-if="limited === null && entry.disbandment === null">
                     <i class="material-icons">flight_land</i>
                     <span>Disband</span>
                   </div>
-                  <div class="action" @click="activate(entry)" v-if="entry.disbandment !== null">
+                  <div class="action"
+                    @click="activate(entry)"
+                    v-if="limited === null && entry.disbandment !== null">
                     <i class="material-icons">flight_takeoff</i>
                     <span>Activate</span>
                   </div>
-                  <div class="action action-delete" @click="doDelete(entry.id)" :class="{ 'delete-confirm': pendingDeletion === entry.id }">
+                  <div class="action action-delete"
+                    @click="doDelete(entry.id)"
+                    :class="{ 'delete-confirm': pendingDeletion === entry.id }"
+                    v-if="limited === null">
                     <i class="material-icons">delete_forever</i>
                     <transition name="slide">
                       <span key="normal" class="delete-hint" v-if="pendingDeletion !== entry.id">Delete</span>
                       <span key="confirm" class="delete-hint" v-if="pendingDeletion === entry.id">Confirm?</span>
                     </transition>
                   </div>
-                  <div class="id">#{{ entry.id }}</div>
+                  <div class="id" v-if="limited === null">#{{ entry.id }}</div>
+                  <div class="action-group review-actions" v-if="entry.type === 'Stashed' && limited === null">
+                    <div class="action" @click="commit(entry.id)">
+                      <i class="material-icons">done</i>
+                    </div>
+                    <div class="action" @click="discard(entry.id)">
+                      <i class="material-icons">close</i>
+                    </div>
+                  </div>
+                  <div class="review" v-if="entry.type === 'Stashed'">
+                    <i class="material-icons">update</i>
+                    {{ formatTimeDiff(entry.timestamp, currentTime) }}
+                  </div>
                 </div>
               </div>
             </div>
@@ -127,7 +174,7 @@
             <div class="inner">
               <i class="material-icons icon-btn" @click="add" v-if="limited === null">add</i>
               <span class="limited-id" v-if="limited !== null">#{{limited}}</span>
-              <input class="bottom-search" placeholder="Search for category/tags/part of name or #id" v-model="searchStr" v-if="limited === null">
+              <input class="bottom-search" placeholder="Search for category/tags/part of name, #id or @pending" v-model="searchStr" v-if="limited === null">
               <transition name="fast-fade" mode="out-in" v-if="!locked">
                 <i class="material-icons syncing-ind syncing" v-if="updateDebouncer !== null" key="syncing">sync</i>
                 <i class="material-icons syncing-ind synced" v-if="updateDebouncer === null" key="synced">done</i>

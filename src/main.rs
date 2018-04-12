@@ -1,13 +1,15 @@
 #![feature(plugin)]
 #![plugin(rocket_codegen)]
-// #![cfg_attr(feature="clippy", plugin(clippy))]
-// Now clippy causes ICE
+#![cfg_attr(feature="clippy", plugin(clippy))]
 
 #![feature(integer_atomics)]
 #![feature(option_filter)]
 #![feature(nll)]
 #![feature(conservative_impl_trait)]
 #![feature(catch_expr)]
+
+#![allow(print_literal)]
+#![allow(needless_pass_by_value)]
 
 extern crate ws;
 extern crate rocket;
@@ -31,10 +33,13 @@ extern crate uuid;
 extern crate ring;
 extern crate byteorder;
 
+extern crate jieba;
+
 mod store;
 mod query;
 mod admin;
 mod config;
+mod key;
 
 use rocket::Rocket;
 use rocket::response::NamedFile;

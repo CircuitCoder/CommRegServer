@@ -214,6 +214,7 @@ textarea::placeholder {
 .action-row {
   line-height: 16px;
   padding-left: 34px;
+  height: 16px;
 }
 
 .action {
@@ -231,12 +232,36 @@ textarea::placeholder {
   cursor: pointer;
 }
 
-.action:hover {
+.action:hover, .action-group .action:hover {
   opacity: 1;
 }
 
-.action .material-icons {
+.action-group {
+  font-size: 12px;
+  line-height: 16px;
+  display: inline-flex;
+
+  align-items: center;
+}
+
+.action-group .action {
+  margin-left: 5px;
+}
+
+.action-group.switch .action {
+  opacity: .38;
+}
+
+.action-group.switch .action.active {
+  opacity: 1;
+}
+
+.action .material-icons, .action-group .material-icons {
   font-size: 16px;
+}
+
+.action-group > .material-icons {
+  opacity: .7;
 }
 
 .action-delete {
@@ -256,6 +281,26 @@ textarea::placeholder {
   position: absolute;
   left: 18px;
   top: 0;
+}
+
+.review {
+  font-size: 12px;
+  line-height: 16px;
+  display: inline-flex;
+  align-items: center;
+  color: black;
+  opacity: .7;
+  float: right;
+}
+
+.review .material-icons {
+  margin-right: 5px;
+  font-size: 16px;
+}
+
+.review-actions {
+  float: right;
+  margin-right: 10px;
 }
 
 .id {

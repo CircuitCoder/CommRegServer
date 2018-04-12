@@ -13,6 +13,26 @@ let CONFIG;
 
 let conn;
 
+// Setup moment
+moment.updateLocale('en', {
+  relativeTime: {
+    future: "-%s",
+    past:   "%s",
+    s  : '%ds',
+    ss : '%ds',
+    m:  "1m",
+    mm: "%dmin",
+    h:  "1h",
+    hh: "%dh",
+    d:  "1D",
+    dd: "%dD",
+    M:  "1M",
+    MM: "%dM",
+    y:  "aY",
+    yy: "%dY"
+  }
+});
+
 function buildWsURI(key) {
   let host = CONFIG.ws.host;
   let port = ':' + CONFIG.ws.port;
@@ -38,9 +58,15 @@ function buildWsURI(key) {
 
 function sendWait(data, raw = false) {
   return new Promise((resolve, reject) => {
-    conn.onmessage = msg => {
-      resolve(JSON.parse(msg.data))
+    let callback = msg => {
+      let payload = JSON.parse(msg.data);
+      if(payload.cmd !== 'update') {
+        conn.removeEventListener('message', callback);
+        resolve(payload);
+      }
     };
+    conn.addEventListener('message', callback);
+
     const compiled = raw ? data : JSON.stringify(data);
     conn.send(compiled);
   });
@@ -99,8 +125,40 @@ function deepEq(a, b) {
   else return a === b;
 }
 
+const ResizeArea = {
+  props: ['disabled', 'value'],
+  template: `
+    <textarea
+      ref="area"
+      :value='value'
+      :disabled="disabled"
+      @input="$emit('input', $event.target.value)"></textarea>
+  `,
+
+  methods: {
+    resize() {
+      let target = this.$refs.area;
+      // Minimal height: 2 lines + border = 60px
+      target.style.height = '60px';
+      // Then set height to scrollHeight
+      target.style.height = target.scrollHeight + 'px';
+    },
+  },
+
+  mounted() {
+    this.resize();
+  },
+
+  watch: {
+    value() {
+      this.resize();
+    },
+  },
+}
+
 const desc = {
   el: '#app',
+  components: { 'resize-area': ResizeArea },
   data: {
     connected: false,
     connectionDown: false,
@@ -110,8 +168,10 @@ const desc = {
     locked: false,
     entries: [],
     referenceEntries: [],
+    engMode: [],
     fileStore: {},
     searchStr: '',
+    currentTime: null,
     // TODO: filtered changes when searchStr changes, or input loses focus
 
     updateDebouncer: null,
@@ -137,53 +197,66 @@ const desc = {
   methods: {
     connect() {
       conn = new WebSocket(buildWsURI(this.authKey));
-      conn.onmessage = (msg) => {
+      let initHandler = async msg => {
+        conn.removeEventListener('message', initHandler);
         try {
           const data = JSON.parse(msg.data);
           if(data.ok) {
-	    if('limited' in data) this.limited = data.limited;
+            if('limited' in data) this.limited = data.limited;
 
             this.connectionDown = false;
             if(!this.connected)
               this.init();
-            // TODO: regular refresh
-            return true;
+            else
+              this.syncDown();
+
+            conn.addEventListener('message', msg => {
+              let payload = JSON.parse(msg.data);
+              if(payload.cmd === 'update') {
+                // Is update
+
+                let index = this.referenceEntries.findIndex(e => e.id === payload.id);
+                if(index === -1) { // New entry
+                  this.entries.shift(deepClone(payload.payload));
+                  this.referenceEntries.shift(payload.payload);
+                } else {
+                  let ni = this.entries.findIndex(e => e.id === payload.id);
+                  this.$set(this.entries, ni, deepClone(payload.payload));
+                  this.$set(this.referenceEntries, index, payload.payload);
+                }
+              }
+            });
           }
         } catch(e) { console.error(e); }
         this.wrongKey = true;
       }
+
+      conn.addEventListener('message', initHandler);
+
       conn.onclose = () => {
+        if(!this.connected) return; // Wrong key
         this.connectionDown = true;
-	setTimeout(() => {
-	  this.connect(); // Try reconnect immediately
-	}, 1000);
+        setTimeout(() => {
+          this.connect(); // Try reconnect immediately
+        }, 1000);
       };
     },
 
     async init() {
       this.connected = true;
       await this.syncDown();
-      this.filteredEntries = [...this.entries]; // Show all
     },
 
     async syncDown() {
-      const data = await sendWait({ cmd: 'list' });
-      this.entries = data.sort((a,b) => {
-        if(a.id < b.id) return -1;
-        if(a.id > b.id) return 1;
-        return 0;
-      });
-      this.referenceEntries = deepClone(this.entries);
+      // Since the rendering may takes a really long time,
+      // It's possible to trigger the update process before the reference is cloned
+      this.referenceEntries = await sendWait({ cmd: 'list' });
+      this.entries = deepClone(this.referenceEntries);
 
       if(this.limited !== null)
-	this.locked = this.entries.length === 0 || this.entries[0].disbandment !== null;
-
-      setTimeout(() => {
-        let areas = document.querySelectorAll('.row textarea');
-        areas.forEach(e => {
-          this.autoresize(e);
-        });
-      });
+        this.locked =
+          this.entries.length === 0
+          || this.entries[0].disbandment !== null;
     },
 
     async syncUp() {
@@ -192,6 +265,7 @@ const desc = {
       let curPtr = 0;
       for(let e of snapshot) {
         while(curPtr < this.referenceEntries.length && this.referenceEntries[curPtr].id < e.id) {
+
           // Delete
           await sendWait({ cmd: 'del', target: this.referenceEntries[curPtr].id });
           ++curPtr;
@@ -199,11 +273,21 @@ const desc = {
 
         if(curPtr >= this.referenceEntries.length || this.referenceEntries[curPtr].id > e.id) {
           // New
-          const data = await sendWait({ cmd: 'put', payload: e });
+          await sendWait({ cmd: 'put', payload: e });
         } else {
           if(!deepEq(e, this.referenceEntries[curPtr])) {
             // Update
-            await sendWait({ cmd: 'put', payload: e });
+            const resp = await sendWait({ cmd: 'put', payload: e });
+            const data = resp.payload;
+            const target = this.entries.find(i => i.id === e.id)
+
+            if(target) {
+              target.type = data.type;
+              target.timestamp = data.timestamp;
+            }
+
+            e.type = data.type;
+            e.timestamp = data.timestamp;
           }
           ++curPtr;
         }
@@ -220,21 +304,19 @@ const desc = {
 
     async listFiles(id) {
       Vue.set(this.fileStore, id, await sendWait({ cmd: 'files', entry: id }));
-      console.log(this.fileStore);
     },
 
-    findMaxId() {
-      return this.entries.reduce((acc, e) => e.id > acc ? e.id : acc, 0);
-    },
-
-    add() {
-      let id = this.findMaxId() + 1;
+    async add() {
+      let resp = await sendWait({ cmd: 'len' });
+      let id = resp.len + 1;
       this.entries.push({
         id,
         name: '',
+        name_eng: '',
         category: '',
         tags: [],
         desc: '',
+        desc_eng: '',
         files: [],
         icon: null,
         creation: moment().format(DATE_FORMAT),
@@ -304,6 +386,10 @@ const desc = {
       this.activeTag = null;
     },
 
+    setEngMode(e, m) {
+      this.$set(this.engMode, e.id, m);
+    },
+
     discardDeletion() {
       this.pendingDeletion = null;
     },
@@ -324,13 +410,6 @@ const desc = {
 
     updateTagFilter(ev) {
       this.tagFilter = ev.target.value;
-    },
-
-    autoresize(target) {
-      // Minimal height: 2 lines + border = 60px
-      target.style.height = '60px';
-      // Then set height to scrollHeight
-      target.style.height = target.scrollHeight + 'px';
     },
 
     // Drag 'n Drop
@@ -399,35 +478,35 @@ const desc = {
         entry.icon = null;
 
       // Update desc
-      let segs = entry.desc.split('\n');
+      let zhSegs = entry.desc.split('\n');
+      let enSegs = entry.desc_eng.split('\n');
 
-      for(let i = 0; i < segs.length; ++i) {
-        const frontEmpty = i === 0 || segs[i-1] === '';
-        const backEmpty = i === segs.length-1 || segs[i+1] === '';
-        if(frontEmpty && backEmpty) {
-          // Check for syntax
-          let result = segs[i].match(/^<(\d+)>$/);
-          if(!result) continue;
-          let id = parseInt(result[1], 10);
-          if(id === index+1) {
-            if(i === 0) {
-              segs.splice(i, 2); // Removes this one
-              --i;
-            } else {
-              segs.splice(i-1, 2); // Removes this one
-              i-=2;
-            }
-          } else if(id > index+1) segs[i] = `<${id-1}>`;
+      let processSegs = (segs) => {
+        for(let i = 0; i < segs.length; ++i) {
+          const frontEmpty = i === 0 || segs[i-1] === '';
+          const backEmpty = i === segs.length-1 || segs[i+1] === '';
+          if(frontEmpty && backEmpty) {
+            // Check for syntax
+            let result = segs[i].match(/^<(\d+)>$/);
+            if(!result) continue;
+            let id = parseInt(result[1], 10);
+            if(id === index+1) {
+              if(i === 0) {
+                segs.splice(i, 2); // Removes this one
+                --i;
+              } else {
+                segs.splice(i-1, 2); // Removes this one
+                i-=2;
+              }
+            } else if(id > index+1) segs[i] = `<${id-1}>`;
+          }
         }
-      }
+      };
 
-      entry.desc = segs.filter(e => e !== null).join('\n');
-
-      const elIndex = this.entries.findIndex(e => e === entry);
-      const el = this.$refs.descs[elIndex];
-      setTimeout(() => {
-        this.autoresize(el);
-      });
+      entry.desc =
+        processSegs(zhSegs).filter(e => e !== null).join('\n');
+      entry.desc =
+        processSegs(enSegs).filter(e => e !== null).join('\n');
     },
 
     setIcon(entry, file) {
@@ -489,6 +568,20 @@ const desc = {
       await sendWait({ cmd: 'deleteFile', target: file });
       await this.listFiles(id);
     },
+
+    async commit(id) {
+      await sendWait({ cmd: 'commit', id });
+    },
+
+    async discard(id) {
+      await sendWait({ cmd: 'discard', id });
+    },
+
+    formatTimeDiff(ts) {
+      if(this.currentTime !== null)
+        return moment(ts).from(this.currentTime);
+      else return moment(ts).fromNow();
+    },
   },
 
   computed: {
@@ -528,22 +621,25 @@ const desc = {
     },
 
     filteredEntries() {
-      let result = this.entries;
+      let result = this.entries.slice(); // Shallow clone
       const segs = this.searchStr.split(' ');
       for(const seg of segs) {
         if(seg === "") continue;
-        if(seg.match(/#\d+/)) { // Is id filter
+        if(seg === '@pending') { // Match pending
+          result = result.filter(e => e.type === 'Stashed');
+        } else if(seg.match(/#\d+/)) { // Is id filter
           const filter = parseInt(seg.substr(1), 10);
           result = result.filter(e => e.id === filter);
         } else {
           result = result.filter(e =>
             e.name.indexOf(seg) !== -1
+            || e.name_eng.indexOf(seg) !== -1
             || e.category === seg
             || e.tags.includes(seg)
           );
         }
       }
-      return result;
+      return result.reverse(); // Larger id on top
     },
 
     files() {
@@ -553,7 +649,6 @@ const desc = {
         Vue.set(this.fileStore, id, []);
         this.listFiles(id);
       }
-      console.log(this.fileStore);
       return this.fileStore[id];
     },
   },
@@ -591,4 +686,9 @@ async function setup() {
 
   // Bootstrap app
   const app = new Vue(desc);
+
+  // Update timestamp
+  setInterval(() => {
+    app.currentTime = Date.now();
+  }, 1000);
 }

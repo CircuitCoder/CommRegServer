@@ -1,0 +1,9 @@
+[package]
+name = "jieba"
+version = "0.0.1"
+authors = ["Liu Xiaoyi <xiaoyi-l17@mails.tsinghua.edu.cn>"]
+build = "src/build.rs"
+
+[build-dependencies]
+bindgen = "0.33.2"
+cc = "*"

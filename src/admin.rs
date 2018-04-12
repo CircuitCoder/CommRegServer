@@ -1,23 +1,25 @@
-use byteorder::{ByteOrder, LittleEndian};
 use config::Config;
-use ring::aead;
-use ring::digest;
-use ring::error::Unspecified;
-use ring::rand::{SystemRandom, SecureRandom};
+use key;
 use serde::Serializer;
 use serde_json::Value;
 use serde_json;
+use ring::error::Unspecified;
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::fs::*;
 use std::io::Write;
 use std::path::Path;
-use std::str::Split;
 use std::sync::*;
 use std;
-use store::{Store, Entry};
+use store::{Store, Entry, PullEntry};
 use uuid::Uuid;
-use ws::{Sender, Handshake, Message, Frame};
+use ws::{Sender, Handshake, Message, Frame, CloseCode};
 use ws;
+use ws::util::Token;
+
+lazy_static! {
+    static ref SENDERS: RwLock<HashMap<Token, Sender>> = RwLock::new(HashMap::new());
+}
 
 fn err_to_wserr<T, I: Into<Cow<'static, str>>>(e: T, reason: I) -> ws::Error
   where T: 'static + std::error::Error + Send + Sync {
@@ -39,9 +41,13 @@ impl Handler {
 
     fn list(&self) -> ws::Result<()> {
         let result = match self.limited {
-            None => self.store.read().unwrap().filter::<Split<&str>>(None, None),
-            Some(id) => self.store.read().unwrap().fetch(id)
-                .map_or_else(Vec::new, |e| { let mut r = Vec::with_capacity(1); r.push(e); r }),
+            None => self.store.read().unwrap().pull(),
+            Some(id) => self.store.read().unwrap().pull_fetch(id)
+                .map_or_else(Vec::new, |e| {
+                    let mut r = Vec::with_capacity(1);
+                    r.push(e);
+                    r
+                }),
         };
         let s = match serde_json::to_string(&result) {
             Err(e) => return Err(err_to_wserr(e, "Serialization failed")),
@@ -65,11 +71,36 @@ impl Handler {
             return Ok(())
         }
 
-        if let Err(e) = self.store.write().unwrap().put(payload, self.limited.is_some()) {
+        let mut s = self.store.write().unwrap();
+        let id = payload.id();
+
+        if let Err(e) = s.stash(payload, self.limited.is_some()) {
             Err(err_to_wserr(e, "Storage failure"))
         } else {
-            self.sender.send("{\"ok\":1}")?;
-            Ok(())
+            let payload = match serde_json::to_value(s.pull_fetch(id)) {
+                Err(e) => return Err(err_to_wserr(e, "Serialization Failed")),
+                Ok(p) => p,
+            };
+
+            std::mem::drop(s);
+            let content = json!({
+                "cmd": "update",
+                "id": id,
+                "payload": payload,
+            }).to_string();
+
+            let pong = json!({
+                "ok": 1,
+                "payload": payload,
+            }).to_string();
+
+            for (k, v) in SENDERS.read().unwrap().iter() {
+                if k != &self.sender.token() {
+                    v.send(content.clone())?;
+                }
+            }
+
+            self.sender.send(pong)
         }
     }
 
@@ -88,6 +119,7 @@ impl Handler {
             }
         }
         self.sender.send("{\"ok\":0}")?;
+        // TODO: syncdown for del
         Ok(())
     }
 
@@ -152,92 +184,30 @@ impl Handler {
         }
     }
 
-    // Authentication utilities for a single entry
-    fn generate_key_impl(&self, target: i32) -> Result<String, Unspecified> {
-        // Convert to bytes
-        let mut buf: [u8; 4 + aead::MAX_TAG_LEN] = [0; 4 + aead::MAX_TAG_LEN]; // 4 bytes for input, MAX_LAG_LEN for cap
-        LittleEndian::write_i32(&mut buf, target);
-
-        // Create a 256-bit hash of the master secret
-        let hash = digest::digest(&digest::SHA256, self.config.secret.as_bytes());
-
-        // Creating sealing key
-        let sealing_key = aead::SealingKey::new(&aead::AES_256_GCM, hash.as_ref())?;
-
-        // Generate a 96-bit nonce
-        let mut nonce: [u8; 12] = [0; 12];
-        let rng = SystemRandom::new();
-        rng.fill(&mut nonce)?;
-
-        let len = aead::seal_in_place(
-            &sealing_key,
-            &nonce,
-            &[],
-            &mut buf,
-            aead::MAX_TAG_LEN)?;
-        let mut result = String::with_capacity(12 * 2 + len * 2);
-
-        for byte in &nonce {
-            write!(&mut result as &mut std::fmt::Write, "{:02x}", byte).map_err(|_| Unspecified)?
-        }
-        for byte in &buf[..len] {
-            write!(&mut result as &mut std::fmt::Write, "{:02x}", byte).map_err(|_| Unspecified)?
-        }
-        Ok(result)
+    pub fn generate_key(&self, target: i32) -> Result<String, Unspecified> {
+        key::generate_key(target, self.config.secret.as_bytes())
     }
 
-    fn try_decrypt_key(&self, key: &str) -> Option<i32> {
-        if key.len() % 2 != 0 || key.len() < 12 * 2 {
-            // Got no nounce
-            return None;
-        }
-
-        let data = &key[12*2..];
-        let mut nonce_vec: [u8; 12] = [0; 12];
-        let mut data_vec: Vec<u8> = Vec::with_capacity(data.len() / 2);
-
-        let result: Result<(), std::num::ParseIntError> = do catch {
-            for i in 0..12 {
-                nonce_vec[i] = u8::from_str_radix(&key[i*2..i*2+2], 16)?;
-            }
-
-            for i in 0..data.len() / 2 {
-                data_vec.push(u8::from_str_radix(&data[i*2..i*2+2], 16)?);
-            }
-            Ok(())
-        };
-
-        if result.is_err() {
-            return None;
-        }
-
-        let result: Result<(), Unspecified> = do catch {
-            // Create a 256-bit hash of the master secret
-            let hash = digest::digest(&digest::SHA256, self.config.secret.as_bytes());
-
-            // Creating opening key
-            let opening_key = aead::OpeningKey::new(&aead::AES_256_GCM, hash.as_ref())?;
-
-
-            aead::open_in_place(
-                &opening_key,
-                &nonce_vec,
-                &[],
-                0,
-                &mut data_vec)?;
-            Ok(())
-        };
-
-        if result.is_err() {
-            return None;
-        }
-
-        Some(LittleEndian::read_i32(data_vec.as_slice()))
+    pub fn try_decrypt_key(&self, key: &str) -> Option<i32> {
+        key::try_decrypt_key(key, self.config.secret.as_bytes())
     }
 }
 
 impl ws::Handler for Handler {
+    fn on_close(&mut self, code: CloseCode, reason: &str) {
+        // Closed
+        SENDERS
+            .write()
+            .unwrap()
+            .remove(&self.sender.token());
+    }
+
     fn on_open(&mut self, shake: Handshake) -> ws::Result<()> {
+        SENDERS
+            .write()
+            .unwrap()
+            .insert(self.sender.token(), self.sender.clone());
+
         let res = shake.request.resource();
         if res == format!("/{}", self.config.secret) {
             // Is administrative account
@@ -262,6 +232,52 @@ impl ws::Handler for Handler {
         };
         if data["cmd"] == "list" {
             self.list()
+        } else if data["cmd"] == "commit" || data["cmd"] == "discard" {
+            if self.limited.is_some() {
+                self.sender.send("{\"ok\":0}")?; // Denied
+                return Ok(())
+            }
+
+            let id = match data["id"] {
+                Value::Number(ref i) => match i.as_i64() {
+                    Some(i) => i as i32,
+                    None => {
+                        self.sender.send("{\"ok\":0}")?;
+                        return Ok(());
+                    }
+                },
+                _ => {
+                    self.sender.send("{\"ok\":0}")?;
+                    return Ok(());
+                },
+            };
+
+            let mut s = self.store.write().unwrap();
+            if data["cmd"] == "commit" {
+                if let Err(e) = s.commit(id) {
+                    return Err(err_to_wserr(e, "Storage failure"))
+                }
+            } else {
+                s.discard(id);
+            };
+
+            let payload = match serde_json::to_value(s.pull_fetch(id)) {
+                Err(e) => return Err(err_to_wserr(e, "Serialization Failed")),
+                Ok(p) => p,
+            };
+
+            let content = json!({
+                "cmd": "update",
+                "id": id,
+                "payload": payload,
+            }).to_string();
+
+            self.sender.broadcast(content);
+            self.sender.send("{\"ok\":1}")
+        } else if data["cmd"] == "len" {
+            let len = self.store.read().unwrap().len();
+            self.sender.send(format!("{{\"ok\":1,\"len\":{}}}", len))?;
+            Ok(())
         } else if data["cmd"] == "put" {
             // TODO: Can we remove this clone?
             self.put(data["payload"].clone())
@@ -328,7 +344,7 @@ impl ws::Handler for Handler {
                     return Ok(());
                 },
             };
-            let key = match self.generate_key_impl(number) {
+            let key = match self.generate_key(number) {
                 Err(_) => {
                     self.sender.send("{\"ok\":0}")?;
                     return Ok(());
